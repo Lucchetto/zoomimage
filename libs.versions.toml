@@ -46,7 +46,7 @@ coil = "3.0.0-alpha06"
 glide = "4.15.1"
 glide-ktx = "1.0.0-beta01"
 picasso = "2.8"
-mavenpublish = "0.25.3"
+mavenpublish = "0.29.0"
 leakcanary = "2.12"
 
 [libraries]
