@@ -8,6 +8,8 @@
 
 Translations: [简体中文](README_zh.md)
 
+### This is a fork of the original library with support for coil multiplatform image loader
+
 Library for zoom images, supported Android View, Compose and Compose Multiplatform; supported
 double-click zoom, One or two fingers gesture zoom, single-finger drag, inertial sliding,
 positioning, rotation,
@@ -63,7 +65,7 @@ https://github.com/panpf/zoomimage/assets/3250512/f067bed9-24e4-4ab8-a839-0731e1
 | Platform/Function | Zoom | Subsampling | Integrated Image Loader |
 |:------------------|:----:|:-----------:|:-----------------------:|
 | Android           |  ✅   |      ✅      |            ✅            |
-| Desktop           |  ✅   |      ✅      |            ❌            |
+| Desktop           |  ✅   |      ✅      |            ✅            |
 | iOS               |  🚧  |     🚧      |           🚧            |
 | Web               |  🚧  |     🚧      |           🚧            |
 
@@ -79,13 +81,13 @@ https://github.com/panpf/zoomimage/assets/3250512/f067bed9-24e4-4ab8-a839-0731e1
 
 ```kotlin
 // The SketchZoomAsyncImage component is provided with the Coil Image Loader, easy to use (recommended)
-implementation("io.github.panpf.zoomimage:zoomimage-compose-sketch:${LAST_VERSION}")
+implementation("io.github.lucchetto.zoomimage:zoomimage-compose-sketch:${LAST_VERSION}")
 
 // The CoilZoomAsyncImage component is provided with the Coil Image Loader, easy to use
-implementation("io.github.panpf.zoomimage:zoomimage-compose-coil:${LAST_VERSION}")
+implementation("io.github.lucchetto.zoomimage:zoomimage-compose-coil:${LAST_VERSION}")
 
 // The GlideZoomAsyncImage component is provided with the Coil Image Loader, easy to use
-implementation("io.github.panpf.zoomimage:zoomimage-compose-glide:${LAST_VERSION}")
+implementation("io.github.lucchetto.zoomimage:zoomimage-compose-glide:${LAST_VERSION}")
 ```
 
 Why is there no picasso version of the compose ZoomImage component? Picasso has officially stated
@@ -96,7 +98,7 @@ Support ([Reference](https://github.com/square/picasso/issues/2203#issuecomment-
 
 ```kotlin
 // Providing the basic ZoomImage component, additional work is required to support network images and subsampling 
-implementation("io.github.panpf.zoomimage:zoomimage-compose:${LAST_VERSION}")
+implementation("io.github.lucchetto.zoomimage:zoomimage-compose:${LAST_VERSION}")
 ```
 
 ### view
@@ -105,19 +107,19 @@ implementation("io.github.panpf.zoomimage:zoomimage-compose:${LAST_VERSION}")
 
 ```kotlin
 // The SketchZoomImageView component is provided with the Sketch Image Loader, easy to use (recommended)
-implementation("io.github.panpf.zoomimage:zoomimage-view-sketch:${LAST_VERSION}")
+implementation("io.github.lucchetto.zoomimage:zoomimage-view-sketch:${LAST_VERSION}")
 
 // The SketchZoomImageView component is provided with the Coil Image Loader, easy to use
-implementation("io.github.panpf.zoomimage:zoomimage-view-coil:${LAST_VERSION}")
+implementation("io.github.lucchetto.zoomimage:zoomimage-view-coil:${LAST_VERSION}")
 
 // The SketchZoomImageView component is provided with the Glide Image Loader, easy to use
-implementation("io.github.panpf.zoomimage:zoomimage-view-glide:${LAST_VERSION}")
+implementation("io.github.lucchetto.zoomimage:zoomimage-view-glide:${LAST_VERSION}")
 
 // The SketchZoomImageView component is provided with the Picasso Image Loader, easy to use
-implementation("io.github.panpf.zoomimage:zoomimage-view-picasso:${LAST_VERSION}")
+implementation("io.github.lucchetto.zoomimage:zoomimage-view-picasso:${LAST_VERSION}")
 
 // Providing the basic ZoomImageView component, additional work is required to support network images and subsampling
-implementation("io.github.panpf.zoomimage:zoomimage-view:${LAST_VERSION}")
+implementation("io.github.lucchetto.zoomimage:zoomimage-view:${LAST_VERSION}")
 ```
 
 ### R8 / Proguard
@@ -219,7 +221,7 @@ Apache 2.0. See the [LICENSE](LICENSE.txt) file for details.
 
 [license_link]: https://www.apache.org/licenses/LICENSE-2.0
 
-[version_icon]: https://img.shields.io/maven-central/v/io.github.panpf.zoomimage/zoomimage-compose
+[version_icon]: https://img.shields.io/maven-central/v/io.github.lucchetto.zoomimage/zoomimage-compose
 
 [version_link]: https://repo1.maven.org/maven2/io/github/panpf/zoomimage/
 

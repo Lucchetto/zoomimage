@@ -8,6 +8,8 @@
 
 翻译：[English](README.md)
 
+### 这是一个原始库的分支，支持 coil 多平台图像加载器。
+
 用于缩放图像的库，支持 Android View、Compose 以及 Compose
 Multiplatform；支持双击缩放、单指或双指手势缩放、单指拖动、惯性滑动、定位、旋转、超大图子采样等功能。
 
@@ -51,7 +53,7 @@ https://github.com/panpf/zoomimage/assets/3250512/f067bed9-24e4-4ab8-a839-0731e1
 | 平台/功能   | 缩放 | 子采样 | 集成图片加载框架 |
 |:--------|:--:|:---:|:--------:|
 | Android | ✅  |  ✅  |    ✅     |
-| Desktop | ✅  |  ✅  |    ❌     |
+| Desktop | ✅  |  ✅  |    ✅     |
 | iOS     | 🚧 | 🚧  |    🚧    |
 | Web     | 🚧 | 🚧  |    🚧    |
 
@@ -67,13 +69,13 @@ https://github.com/panpf/zoomimage/assets/3250512/f067bed9-24e4-4ab8-a839-0731e1
 
 ```kotlin
 // 提供适配了 Sketch 图片加载器的 SketchZoomAsyncImage 组件，用法简单（推荐使用）
-implementation("io.github.panpf.zoomimage:zoomimage-compose-sketch:${LAST_VERSION}")
+implementation("io.github.lucchetto.zoomimage:zoomimage-compose-sketch:${LAST_VERSION}")
 
 // 提供适配了 Coil 图片加载器的 CoilZoomAsyncImage 组件，用法简单
-implementation("io.github.panpf.zoomimage:zoomimage-compose-coil:${LAST_VERSION}")
+implementation("io.github.lucchetto.zoomimage:zoomimage-compose-coil:${LAST_VERSION}")
 
 // 提供适配了 Glide 图片加载器的 GlideZoomAsyncImage 组件，用法简单
-implementation("io.github.panpf.zoomimage:zoomimage-compose-glide:${LAST_VERSION}")
+implementation("io.github.lucchetto.zoomimage:zoomimage-compose-glide:${LAST_VERSION}")
 ```
 
 为什么没有 picasso 版本的 compose ZoomImage 组件？因为 Picasso 官方已经说明不会提供对 compose
@@ -83,7 +85,7 @@ implementation("io.github.panpf.zoomimage:zoomimage-compose-glide:${LAST_VERSION
 
 ```kotlin
 // 提供基础的 ZoomImage 组件，还需要做额外的工作以支持网络图片和子采样
-implementation("io.github.panpf.zoomimage:zoomimage-compose:${LAST_VERSION}")
+implementation("io.github.lucchetto.zoomimage:zoomimage-compose:${LAST_VERSION}")
 ```
 
 ### view
@@ -92,19 +94,19 @@ implementation("io.github.panpf.zoomimage:zoomimage-compose:${LAST_VERSION}")
 
 ```kotlin
 // 提供适配了 Sketch 图片加载器的 SketchZoomImageView 组件，用法简单（推荐使用）
-implementation("io.github.panpf.zoomimage:zoomimage-view-sketch:${LAST_VERSION}")
+implementation("io.github.lucchetto.zoomimage:zoomimage-view-sketch:${LAST_VERSION}")
 
 // 提供适配了 Coil 图片加载器的 CoilZoomImageView 组件，用法简单
-implementation("io.github.panpf.zoomimage:zoomimage-view-coil:${LAST_VERSION}")
+implementation("io.github.lucchetto.zoomimage:zoomimage-view-coil:${LAST_VERSION}")
 
 // 提供适配了 Glide 图片加载器的 GlideZoomImageView 组件，用法简单
-implementation("io.github.panpf.zoomimage:zoomimage-view-glide:${LAST_VERSION}")
+implementation("io.github.lucchetto.zoomimage:zoomimage-view-glide:${LAST_VERSION}")
 
 // 提供适配了 Picasso 图片加载器的 PicassoZoomImageView 组件，用法简单
-implementation("io.github.panpf.zoomimage:zoomimage-view-picasso:${LAST_VERSION}")
+implementation("io.github.lucchetto.zoomimage:zoomimage-view-picasso:${LAST_VERSION}")
 
 // 提供最基础的 ZoomImageView 组件，还需要做额外的工作以支持网络图片和子采样
-implementation("io.github.panpf.zoomimage:zoomimage-view:${LAST_VERSION}")
+implementation("io.github.lucchetto.zoomimage:zoomimage-view:${LAST_VERSION}")
 ```
 
 ### R8 / Proguard
@@ -200,7 +202,7 @@ Apache 2.0. 有关详细信息，请参阅 [LICENSE](LICENSE.txt) 文件.
 
 [license_link]: https://www.apache.org/licenses/LICENSE-2.0
 
-[version_icon]: https://img.shields.io/maven-central/v/io.github.panpf.zoomimage/zoomimage-compose
+[version_icon]: https://img.shields.io/maven-central/v/io.github.lucchetto.zoomimage/zoomimage-compose
 
 [version_link]: https://repo1.maven.org/maven2/io/github/panpf/zoomimage/
 
