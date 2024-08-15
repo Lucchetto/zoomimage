@@ -24,6 +24,7 @@ import android.graphics.drawable.LayerDrawable
 import android.util.AttributeSet
 import androidx.core.view.ViewCompat
 import coil3.annotation.ExperimentalCoilApi
+import coil3.asDrawable
 import coil3.imageLoader
 import coil3.request.CachePolicy
 import coil3.request.SuccessResult

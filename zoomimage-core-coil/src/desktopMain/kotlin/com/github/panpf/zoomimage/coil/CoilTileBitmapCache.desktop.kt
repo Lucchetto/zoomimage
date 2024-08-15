@@ -2,7 +2,7 @@ package com.github.panpf.zoomimage.coil
 
 import coil3.ImageLoader
 import coil3.annotation.ExperimentalCoilApi
-import coil3.asCoilImage
+import coil3.asImage
 import coil3.memory.MemoryCache
 import com.github.panpf.zoomimage.subsampling.CacheTileBitmap
 import com.github.panpf.zoomimage.subsampling.DesktopTileBitmap
@@ -28,7 +28,7 @@ actual class CoilTileBitmapCache actual constructor(
         disallowReuseBitmap: Boolean
     ): CacheTileBitmap? {
         val bitmap = (tileBitmap as DesktopTileBitmap).bitmap ?: return null
-        val newCacheValue = MemoryCache.Value(bitmap.asCoilImage())
+        val newCacheValue = MemoryCache.Value(bitmap.asImage())
         val memoryCache = imageLoader.memoryCache ?: return null
         memoryCache[MemoryCache.Key(key)] = newCacheValue
         return CoilTileBitmap(key, newCacheValue)

@@ -30,11 +30,9 @@ fun CoilZoomAsyncImageSample(sketchImageUri: String) {
     ) { contentScale, alignment, state: ZoomState, _, scrollBar ->
         var myLoadState by remember { mutableStateOf<MyLoadState>(MyLoadState.None) }
         val context = LocalContext.current
-        val lifecycle = LocalLifecycleOwner.current.lifecycle
         val request = remember(key1 = sketchImageUri) {
             val model = sketchUri2CoilModel(context, sketchImageUri)
             Builder(context).apply {
-                lifecycle(lifecycle)
                 precision(INEXACT)
                 data(model)
                 crossfade(true)
