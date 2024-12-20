@@ -143,12 +143,16 @@ internal class ZoomableStateImpl(
      */
     override var contentSize: IntSize by mutableStateOf(IntSize.Zero)
 
+    private var _contentOriginSize: IntSize by mutableStateOf(IntSize.Zero)
     /**
      * The original size of the content, it is usually set by [SubsamplingState] after parsing the original size of the image
      */
-    override var contentOriginSize: IntSize by mutableStateOf(IntSize.Zero)
-
-
+    override var contentOriginSize: IntSize
+        get() = _contentOriginSize
+        set(value) {
+            _contentOriginSize = value.times(1)
+        }
+    
     /* *********************************** Configurable properties ****************************** */
 
     /**
