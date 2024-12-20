@@ -114,7 +114,11 @@ class ProxyZoomableState(
     override val userTransform: Transform
         get() = targetZoomableState.userTransform
     override val transform: Transform
-        get() = targetZoomableState.transform
+        get() = targetZoomableState.transform.let {
+            it.copy(
+                scale = it.scale.times(2f)
+            )
+        }
     override val minScale: Float
         get() = targetZoomableState.minScale
     override val mediumScale: Float
