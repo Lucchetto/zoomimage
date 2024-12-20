@@ -22,6 +22,7 @@ import com.github.panpf.zoomimage.compose.util.format
 import com.github.panpf.zoomimage.compose.zoom.Transform
 import com.github.panpf.zoomimage.compose.zoom.ZoomAnimationSpec
 import com.github.panpf.zoomimage.compose.zoom.ZoomableState
+import com.github.panpf.zoomimage.compose.zoom.ZoomableStateImpl
 import com.github.panpf.zoomimage.compose.zoom.rememberZoomableState
 import com.github.panpf.zoomimage.test.waitMillis
 import com.github.panpf.zoomimage.util.Logger
@@ -36,7 +37,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 @OptIn(ExperimentalTestApi::class)
-class ZoomableStateTest {
+class ZoomableStateImplTest {
 
     @Test
     fun testRememberZoomableState() = runComposeUiTest {
@@ -59,7 +60,7 @@ class ZoomableStateTest {
     @Test
     fun testConstructor() {
         val logger = Logger("Test")
-        val zoomable = ZoomableState(logger, LayoutDirection.Ltr)
+        val zoomable = ZoomableStateImpl(logger, LayoutDirection.Ltr)
         assertEquals(expected = logger, actual = zoomable.logger)
         @Suppress("USELESS_IS_CHECK")
         assertEquals(expected = true, actual = zoomable is RememberObserver)
@@ -67,7 +68,7 @@ class ZoomableStateTest {
 
     @Test
     fun testContainerSize() {
-        val zoomable = ZoomableState(Logger("Test"), LayoutDirection.Ltr)
+        val zoomable = ZoomableStateImpl(Logger("Test"), LayoutDirection.Ltr)
         assertEquals(expected = IntSize.Zero, actual = zoomable.containerSize)
 
         zoomable.containerSize = IntSize(1000, 2000)
@@ -76,7 +77,7 @@ class ZoomableStateTest {
 
     @Test
     fun testContentSize() {
-        val zoomable = ZoomableState(Logger("Test"), LayoutDirection.Ltr)
+        val zoomable = ZoomableStateImpl(Logger("Test"), LayoutDirection.Ltr)
         assertEquals(expected = IntSize.Zero, actual = zoomable.contentSize)
 
         zoomable.containerSize = IntSize(1000, 2000)
@@ -90,7 +91,7 @@ class ZoomableStateTest {
 
     @Test
     fun testContentOriginSize() {
-        val zoomable = ZoomableState(Logger("Test"), LayoutDirection.Ltr)
+        val zoomable = ZoomableStateImpl(Logger("Test"), LayoutDirection.Ltr)
         assertEquals(expected = IntSize.Zero, actual = zoomable.contentOriginSize)
 
         zoomable.contentOriginSize = IntSize(4000, 2400)
@@ -99,7 +100,7 @@ class ZoomableStateTest {
 
     @Test
     fun testContentScale() {
-        val zoomable = ZoomableState(Logger("Test"), LayoutDirection.Ltr)
+        val zoomable = ZoomableStateImpl(Logger("Test"), LayoutDirection.Ltr)
         assertEquals(expected = ContentScale.Fit, actual = zoomable.contentScale)
 
         zoomable.contentScale = ContentScale.Crop
@@ -108,7 +109,7 @@ class ZoomableStateTest {
 
     @Test
     fun testAlignment() {
-        val zoomable = ZoomableState(Logger("Test"), LayoutDirection.Ltr)
+        val zoomable = ZoomableStateImpl(Logger("Test"), LayoutDirection.Ltr)
         assertEquals(expected = Alignment.Center, actual = zoomable.alignment)
 
         zoomable.alignment = Alignment.TopStart
@@ -119,7 +120,7 @@ class ZoomableStateTest {
 
     @Test
     fun testReadMode() {
-        val zoomable = ZoomableState(Logger("Test"), LayoutDirection.Ltr)
+        val zoomable = ZoomableStateImpl(Logger("Test"), LayoutDirection.Ltr)
         assertEquals(expected = null, actual = zoomable.readMode)
 
         zoomable.readMode = ReadMode.Default
@@ -128,7 +129,7 @@ class ZoomableStateTest {
 
     @Test
     fun testScalesCalculator() {
-        val zoomable = ZoomableState(Logger("Test"), LayoutDirection.Ltr)
+        val zoomable = ZoomableStateImpl(Logger("Test"), LayoutDirection.Ltr)
         assertEquals(expected = ScalesCalculator.Dynamic, actual = zoomable.scalesCalculator)
 
         zoomable.scalesCalculator = ScalesCalculator.Fixed
@@ -137,7 +138,7 @@ class ZoomableStateTest {
 
     @Test
     fun testThreeStepScale() {
-        val zoomable = ZoomableState(Logger("Test"), LayoutDirection.Ltr)
+        val zoomable = ZoomableStateImpl(Logger("Test"), LayoutDirection.Ltr)
         assertEquals(expected = false, actual = zoomable.threeStepScale)
 
         zoomable.threeStepScale = true
@@ -146,7 +147,7 @@ class ZoomableStateTest {
 
     @Test
     fun testRubberBandScale() {
-        val zoomable = ZoomableState(Logger("Test"), LayoutDirection.Ltr)
+        val zoomable = ZoomableStateImpl(Logger("Test"), LayoutDirection.Ltr)
         assertEquals(expected = true, actual = zoomable.rubberBandScale)
 
         zoomable.rubberBandScale = false
@@ -155,7 +156,7 @@ class ZoomableStateTest {
 
     @Test
     fun testOneFingerScaleSpec() {
-        val zoomable = ZoomableState(Logger("Test"), LayoutDirection.Ltr)
+        val zoomable = ZoomableStateImpl(Logger("Test"), LayoutDirection.Ltr)
         assertEquals(expected = OneFingerScaleSpec.Default, actual = zoomable.oneFingerScaleSpec)
 
         zoomable.oneFingerScaleSpec = OneFingerScaleSpec(DefaultPanToScaleTransformer(100))
@@ -167,7 +168,7 @@ class ZoomableStateTest {
 
     @Test
     fun testAnimationSpec() {
-        val zoomable = ZoomableState(Logger("Test"), LayoutDirection.Ltr)
+        val zoomable = ZoomableStateImpl(Logger("Test"), LayoutDirection.Ltr)
         assertEquals(expected = ZoomAnimationSpec.Default, actual = zoomable.animationSpec)
 
         zoomable.animationSpec = ZoomAnimationSpec(durationMillis = 4000)
@@ -179,7 +180,7 @@ class ZoomableStateTest {
 
     @Test
     fun testLimitOffsetWithinBaseVisibleRect() {
-        val zoomable = ZoomableState(Logger("Test"), LayoutDirection.Ltr)
+        val zoomable = ZoomableStateImpl(Logger("Test"), LayoutDirection.Ltr)
         assertEquals(expected = false, actual = zoomable.limitOffsetWithinBaseVisibleRect)
 
         zoomable.limitOffsetWithinBaseVisibleRect = true
@@ -194,7 +195,7 @@ class ZoomableStateTest {
 
     @Test
     fun testDisabledGestureTypes() {
-        val zoomable = ZoomableState(Logger("Test"), LayoutDirection.Ltr)
+        val zoomable = ZoomableStateImpl(Logger("Test"), LayoutDirection.Ltr)
         assertEquals(expected = 0, actual = zoomable.disabledGestureTypes)
 
         zoomable.disabledGestureTypes = GestureType.ONE_FINGER_SCALE or GestureType.TWO_FINGER_SCALE
@@ -206,7 +207,7 @@ class ZoomableStateTest {
 
     @Test
     fun testReverseMouseWheelScale() {
-        val zoomable = ZoomableState(Logger("Test"), LayoutDirection.Ltr)
+        val zoomable = ZoomableStateImpl(Logger("Test"), LayoutDirection.Ltr)
         assertEquals(expected = false, actual = zoomable.reverseMouseWheelScale)
 
         zoomable.reverseMouseWheelScale = true
@@ -215,7 +216,7 @@ class ZoomableStateTest {
 
     @Test
     fun testMouseWheelScaleScrollDeltaConverter() {
-        val zoomable = ZoomableState(Logger("Test"), LayoutDirection.Ltr)
+        val zoomable = ZoomableStateImpl(Logger("Test"), LayoutDirection.Ltr)
         assertEquals(
             expected = 2.31f,
             actual = zoomable.mouseWheelScaleScrollDeltaConverter(7f).format(2)
@@ -3720,7 +3721,7 @@ class ZoomableStateTest {
 
     @Test
     fun testCheckSupportGestureType() {
-        val zoomableState = ZoomableState(Logger("Test"), LayoutDirection.Ltr)
+        val zoomableState = ZoomableStateImpl(Logger("Test"), LayoutDirection.Ltr)
         assertEquals(
             expected = "[ONE_FINGER_DRAG:true, TWO_FINGER_SCALE:true, ONE_FINGER_SCALE:true, DOUBLE_TAP_SCALE:true, MOUSE_WHEEL_SCALE:true, KEYBOARD_SCALE:true, KEYBOARD_DRAG:true]",
             actual = GestureType.values.joinToString(prefix = "[", postfix = "]") {

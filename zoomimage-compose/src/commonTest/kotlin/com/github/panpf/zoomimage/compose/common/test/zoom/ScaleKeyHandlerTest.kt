@@ -12,6 +12,7 @@ import com.github.panpf.zoomimage.compose.zoom.DefaultScaleInKeyMatchers
 import com.github.panpf.zoomimage.compose.zoom.DefaultScaleOutKeyMatchers
 import com.github.panpf.zoomimage.compose.zoom.ScaleKeyHandler
 import com.github.panpf.zoomimage.compose.zoom.ZoomableState
+import com.github.panpf.zoomimage.compose.zoom.ZoomableStateImpl
 import com.github.panpf.zoomimage.compose.zoom.rememberZoomableState
 import com.github.panpf.zoomimage.test.KeyEvent
 import com.github.panpf.zoomimage.util.Logger
@@ -130,7 +131,7 @@ class ScaleKeyHandlerTest {
     @Test
     fun testHandle() {
         val coroutineScope = CoroutineScope(Dispatchers.Main)
-        val zoomableState = ZoomableState(Logger("Test"), LayoutDirection.Ltr)
+        val zoomableState = ZoomableStateImpl(Logger("Test"), LayoutDirection.Ltr)
         val scaleKeyHandler2 =
             ScaleKeyHandler(keyMatchers = DefaultScaleInKeyMatchers, scaleIn = true)
         assertEquals(
