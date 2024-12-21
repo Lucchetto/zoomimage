@@ -23,7 +23,6 @@ import com.github.panpf.zoomimage.compose.coil.CoilComposeSubsamplingImageGenera
 import com.github.panpf.zoomimage.compose.rememberZoomImageLogger
 import com.github.panpf.zoomimage.compose.subsampling.rememberSubsamplingState
 import com.github.panpf.zoomimage.compose.zoom.ZoomableState
-import com.github.panpf.zoomimage.compose.zoom.rememberProxyZoomableState
 import com.github.panpf.zoomimage.compose.zoom.rememberZoomableState
 import com.github.panpf.zoomimage.sample.resources.Res
 import com.github.panpf.zoomimage.sample.ui.theme.AppTheme
@@ -87,7 +86,7 @@ fun App(onContentChanged: ((Navigator) -> Unit)? = null) {
         Scaffold {
             Box(modifier = Modifier.fillMaxSize()) {
                 val afterZoomableState = rememberZoomableState()
-                val beforeZoomableState = rememberProxyZoomableState(afterZoomableState)
+                val beforeZoomableState = rememberSyncScaleZoomableState(afterZoomableState)
 
                 val beforeZoomState = rememberCoilZoomState(beforeZoomableState)
                 val afterZoomState = rememberCoilZoomState(afterZoomableState)

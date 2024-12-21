@@ -27,7 +27,6 @@ import com.github.panpf.zoomimage.compose.sketch.internal.EngineSketchComposeSub
 import com.github.panpf.zoomimage.compose.subsampling.SubsamplingState
 import com.github.panpf.zoomimage.compose.subsampling.rememberSubsamplingState
 import com.github.panpf.zoomimage.compose.zoom.ZoomableState
-import com.github.panpf.zoomimage.compose.zoom.rememberProxyZoomableState
 import com.github.panpf.zoomimage.compose.zoom.rememberZoomableState
 import com.github.panpf.zoomimage.util.Logger
 import com.github.panpf.zoomimage.util.Logger.Level
@@ -44,7 +43,7 @@ fun rememberSketchZoomState(
     logLevel: Level? = null
 ): SketchZoomState {
     val logger: Logger = rememberZoomImageLogger(tag = "SketchZoomAsyncImage", level = logLevel)
-    val zoomableState = rememberProxyZoomableState(rememberZoomableState(logger))
+    val zoomableState = rememberZoomableState(logger)
     val subsamplingState = rememberSubsamplingState(zoomableState)
     return remember(logger, zoomableState, subsamplingState, subsamplingImageGenerators) {
         SketchZoomState(logger, zoomableState, subsamplingState, subsamplingImageGenerators)
