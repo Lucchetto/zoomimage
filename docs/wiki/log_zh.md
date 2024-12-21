@@ -2,6 +2,7 @@
 
 翻译：[English](log.md)
 
+> [!TIP]
 > * 以下示例优先用 Compose 版本的组件来演示
 > * [ZoomState].zoomable 等价于 [ZoomImageView].zoomable
 > * [ZoomState].subsampling 等价于 [ZoomImageView].subsampling
@@ -20,17 +21,17 @@ ZoomImage 的运行机制。
 示例：
 
 ```kotlin
-val state: ZoomState by rememberZoomState()
+val zoomState: ZoomState by rememberZoomState()
 
-LaunchEffect(Unit) {
-    state.logger.level = Logger.DEBUG
+LaunchEffect(zoomState.logger) {
+    zoomState.logger.level = Logger.DEBUG
 }
 
 SketchZoomAsyncImage(
-    imageUri = "http://sample.com/sample.jpg",
+    imageUri = "https://sample.com/sample.jpeg",
     contentDescription = "view image",
     modifier = Modifier.fillMaxSize(),
-    state = state,
+    zoomState = zoomState,
 )
 ```
 
@@ -42,22 +43,22 @@ SketchZoomAsyncImage(
 示例：
 
 ```kotlin
-val state: ZoomState by rememberZoomState()
+val zoomState: ZoomState by rememberZoomState()
 
-state.logger.pipeline = MyLoggerPipeline()
+zoomState.logger.pipeline = MyLoggerPipeline()
 
 SketchZoomAsyncImage(
-    imageUri = "http://sample.com/sample.jpg",
+    imageUri = "https://sample.com/sample.jpeg",
     contentDescription = "view image",
     modifier = Modifier.fillMaxSize(),
-    state = state,
+    zoomState = zoomState,
 )
 ```
 
-[ZoomImageView]: ../../zoomimage-view/src/main/java/com/github/panpf/zoomimage/ZoomImageView.kt
+[ZoomImageView]: ../../zoomimage-view/src/main/kotlin/com/github/panpf/zoomimage/ZoomImageView.kt
 
 [ZoomImage]: ../../zoomimage-compose/src/commonMain/kotlin/com/github/panpf/zoomimage/ZoomImage.kt
 
 [ZoomState]: ../../zoomimage-compose/src/commonMain/kotlin/com/github/panpf/zoomimage/compose/ZoomState.kt
 
-[Logger]: ../../zoomimage-core/src/commonMain/kotlin/com/github/panpf/zoomimage/util/Logger.kt
+[Logger]: ../../zoomimage-core/src/commonMain/kotlin/com/github/panpf/zoomimage/util/Logger.common.kt

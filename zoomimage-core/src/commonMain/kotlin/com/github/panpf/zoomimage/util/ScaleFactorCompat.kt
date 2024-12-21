@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,10 @@
 
 package com.github.panpf.zoomimage.util
 
-import com.github.panpf.zoomimage.util.internal.format
-import com.github.panpf.zoomimage.util.internal.lerp
 import com.github.panpf.zoomimage.util.internal.packFloats
 import com.github.panpf.zoomimage.util.internal.unpackFloat1
 import com.github.panpf.zoomimage.util.internal.unpackFloat2
+import kotlin.jvm.JvmInline
 
 /**
  * Constructs a [ScaleFactorCompat] from the given x and y scale values
@@ -32,7 +31,7 @@ fun ScaleFactorCompat(scaleX: Float, scaleY: Float) = ScaleFactorCompat(packFloa
 /**
  * Holds 2 dimensional scaling factors for horizontal and vertical axes
  *
- * @see [com.github.panpf.zoomimage.core.test.util.ScaleFactorCompatTest]
+ * Copy androidx/compose/ui/layout/ScaleFactor.kt
  */
 @JvmInline
 value class ScaleFactorCompat internal constructor(@PublishedApi internal val packedValue: Long) {
@@ -63,10 +62,10 @@ value class ScaleFactorCompat internal constructor(@PublishedApi internal val pa
             return unpackFloat2(packedValue)
         }
 
-    @Suppress("NOTHING_TO_INLINE")
+    @Suppress("NOTHING_TO_INLINE", "KotlinRedundantDiagnosticSuppress")
     inline operator fun component1(): Float = scaleX
 
-    @Suppress("NOTHING_TO_INLINE")
+    @Suppress("NOTHING_TO_INLINE", "KotlinRedundantDiagnosticSuppress")
     inline operator fun component2(): Float = scaleY
 
     /**
@@ -190,17 +189,30 @@ fun lerp(start: ScaleFactorCompat, stop: ScaleFactorCompat, fraction: Float): Sc
 /* ************************************ Extra-extended functions ******************************** */
 
 /**
+ * Returns true if the scaling is 1
+ *
+ * @see com.github.panpf.zoomimage.core.common.test.util.ScaleFactorCompatTest.testIsOrigin
+ */
+fun ScaleFactorCompat.isOrigin(): Boolean = scaleX.format(2) == 1f && scaleY.format(2) == 1f
+
+/**
  * Return short string descriptions, for example: '3.45x9.87'
+ *
+ * @see com.github.panpf.zoomimage.core.common.test.util.ScaleFactorCompatTest.testToShortString
  */
 fun ScaleFactorCompat.toShortString(): String = "${scaleX.format(2)}x${scaleY.format(2)}"
 
 /**
  * Create a ScaleFactorCompat, scaleX and scaleY are both [scale]
+ *
+ * @see com.github.panpf.zoomimage.core.common.test.util.ScaleFactorCompatTest.testCreate
  */
 fun ScaleFactorCompat(scale: Float): ScaleFactorCompat = ScaleFactorCompat(scale, scale)
 
 /**
  * The scaling factor that remains the same scale, that is, scaleX and scaleY are both 1f
+ *
+ * @see com.github.panpf.zoomimage.core.common.test.util.ScaleFactorCompatTest.testOrigin
  */
 val ScaleFactorCompat.Companion.Origin: ScaleFactorCompat
     get() = scaleFactorCompatOrigin
@@ -208,12 +220,16 @@ private val scaleFactorCompatOrigin by lazy { ScaleFactorCompat(scaleX = 1f, sca
 
 /**
  * Returns an ScaleFactorCompat scaled by multiplying [scaleFactor]
+ *
+ * @see com.github.panpf.zoomimage.core.common.test.util.ScaleFactorCompatTest.testTimes
  */
 operator fun ScaleFactorCompat.times(scaleFactor: ScaleFactorCompat) =
     ScaleFactorCompat(scaleX * scaleFactor.scaleX, scaleY * scaleFactor.scaleY)
 
 /**
  * Returns an ScaleFactorCompat scaled by dividing [scaleFactor]
+ *
+ * @see com.github.panpf.zoomimage.core.common.test.util.ScaleFactorCompatTest.testDiv
  */
 operator fun ScaleFactorCompat.div(scaleFactor: ScaleFactorCompat) =
     ScaleFactorCompat(scaleX / scaleFactor.scaleX, scaleY / scaleFactor.scaleY)

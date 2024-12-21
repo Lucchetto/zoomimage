@@ -2,6 +2,7 @@
 
 Translations: [简体中文](rotate_zh.md)
 
+> [!TIP]
 > * The following example takes precedence over the Compose version component for demonstration
 > * [ZoomState].zoomable is equivalent to [ZoomImageView].zoomable
 > * [ZoomState].subsampling is equivalent to [ZoomImageView].subsampling
@@ -17,21 +18,21 @@ one parameter:
 example：
 
 ```kotlin
-val state: ZoomState by rememberZoomState()
+val zoomState: ZoomState by rememberZoomState()
 
 SketchZoomAsyncImage(
-    imageUri = "http://sample.com/sample.jpg",
+  imageUri = "https://sample.com/sample.jpeg",
     contentDescription = "view image",
     modifier = Modifier.fillMaxSize(),
-    state = state,
+    zoomState = zoomState,
 )
 
 val coroutineScope = rememberCoroutineScope()
 Button(
     onClick = {
         coroutineScope.launch {
-            val targetRotation = state.zoomable.transform.rotation.roundToInt() + 90
-            state.zoomable.rotate(targetRotation = targetRotation)
+            val targetRotation = zoomState.zoomable.transform.rotation.roundToInt() + 90
+            zoomState.zoomable.rotate(targetRotation = targetRotation)
         }
     }
 ) {
@@ -41,8 +42,8 @@ Button(
 Button(
     onClick = {
         coroutineScope.launch {
-            val targetRotation = state.zoomable.transform.rotation.roundToInt() - 90
-            state.zoomable.rotate(targetRotation = targetRotation)
+            val targetRotation = zoomState.zoomable.transform.rotation.roundToInt() - 90
+            zoomState.zoomable.rotate(targetRotation = targetRotation)
         }
     }
 ) {
@@ -54,9 +55,9 @@ Button(
 
 ```kotlin
 // compose
-val state: ZoomState by rememberZoomState()
-SketchZoomAsyncImage(state = state)
-val zoomable: ZoomableState = state.zoomable
+val zoomState: ZoomState by rememberZoomState()
+SketchZoomAsyncImage(zoomState = zoomState)
+val zoomable: ZoomableState = zoomState.zoomable
 
 // view
 val sketchZoomImageView = SketchZoomImageView(context)
@@ -79,7 +80,7 @@ val zoomable: ZoomableEngine = sketchZoomImageView.zoomable
 * The relevant properties of the view are wrapped in StateFlow, and its collect function can be
   called to implement the listening
 
-[ZoomImageView]: ../../zoomimage-view/src/main/java/com/github/panpf/zoomimage/ZoomImageView.kt
+[ZoomImageView]: ../../zoomimage-view/src/main/kotlin/com/github/panpf/zoomimage/ZoomImageView.kt
 
 [ZoomImage]: ../../zoomimage-compose/src/commonMain/kotlin/com/github/panpf/zoomimage/ZoomImage.kt
 

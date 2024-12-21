@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,12 @@ package com.github.panpf.zoomimage.view.zoom.internal
 
 import android.view.View
 import android.view.animation.Interpolator
-import androidx.core.view.ViewCompat
 
+/**
+ * A simple float animation class that can animate a float value from a start value to an end value.
+ *
+ * @see com.github.panpf.zoomimage.view.test.zoom.internal.FloatAnimatableTest
+ */
 internal class FloatAnimatable(
     private val view: View,
     private val startValue: Float,
@@ -40,15 +44,10 @@ internal class FloatAnimatable(
 
     fun start(delay: Int = 0) {
         if (running) return
+        running = true
         value = startValue
         startTime = System.currentTimeMillis() + delay
-        running = true
         view.postDelayed(runnable, delay.toLong())
-    }
-
-    fun restart(delay: Int = 0) {
-        stop()
-        start(delay)
     }
 
     fun stop() {
@@ -58,20 +57,25 @@ internal class FloatAnimatable(
         onEnd()
     }
 
+    fun restart(delay: Int = 0) {
+        stop()
+        start(delay)
+    }
+
     private fun frame() {
+        if (!running) return
         val progress = computeProgress()
         val currentValue = startValue + (progress * (endValue - startValue))
         value = currentValue
         onUpdateValue(currentValue)
-        running = progress < 1f
-        if (running) {
-            ViewCompat.postOnAnimation(view, runnable)
+        if (progress < 1f) {
+            view.postOnAnimation(runnable)
         } else {
+            running = false
             onEnd()
         }
     }
 
-    @Suppress("UnnecessaryVariable")
     private fun computeProgress(): Float {
         if (durationMillis <= 0) return 1f
         val elapsedTime = (System.currentTimeMillis() - startTime).coerceAtLeast(0)

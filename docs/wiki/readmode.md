@@ -2,6 +2,7 @@
 
 Translations: [简体中文](readmode_zh.md)
 
+> [!TIP]
 > * The following example takes precedence over the Compose version component for demonstration
 > * [ZoomState].zoomable is equivalent to [ZoomImageView].zoomable
 > * [ZoomState].subsampling is equivalent to [ZoomImageView].subsampling
@@ -18,17 +19,17 @@ content of the long text image
 ### Enabled Read Mode
 
 ```kotlin
-val state: ZoomState by rememberZoomState()
+val zoomState: ZoomState by rememberZoomState()
 
-LaunchEffect(Unit) {
-    state.zoomable.readmode = ReadMode.Default
+LaunchEffect(zoomState.zommable) {
+    zoomState.zoomable.readMode = ReadMode.Default
 }
 
 SketchZoomAsyncImage(
-    imageUri = "http://sample.com/sample.jpg",
+  imageUri = "https://sample.com/sample.jpeg",
     contentDescription = "view image",
     modifier = Modifier.fillMaxSize(),
-    state = state,
+    zoomState = zoomState,
 )
 ```
 
@@ -44,10 +45,11 @@ The [ReadMode] class is used to control the read mode, and it has two parameters
   be used based on contentSize and containerSize, and the default implementation is
   ReadMode.LongImageDecider, which uses read mode only for long images
 
+> [!TIP]
 > * The default configuration for ReadMode is ReadMode.Default
 > * You can implement the ReadMode.Decider interface to implement your own decision rules
 
-[ZoomImageView]: ../../zoomimage-view/src/main/java/com/github/panpf/zoomimage/ZoomImageView.kt
+[ZoomImageView]: ../../zoomimage-view/src/main/kotlin/com/github/panpf/zoomimage/ZoomImageView.kt
 
 [ZoomImage]: ../../zoomimage-compose/src/commonMain/kotlin/com/github/panpf/zoomimage/ZoomImage.kt
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,27 +16,33 @@
 
 package com.github.panpf.zoomimage.subsampling
 
-import com.github.panpf.zoomimage.subsampling.internal.Tile
 import com.github.panpf.zoomimage.util.IntOffsetCompat
 import com.github.panpf.zoomimage.util.IntRectCompat
 
 /**
  * Tile-related information provided to users
+ *
+ * @see com.github.panpf.zoomimage.core.common.test.subsampling.TileSnapshotTest
  */
 data class TileSnapshot(
     val coordinate: IntOffsetCompat,
     val srcRect: IntRectCompat,
     val sampleSize: Int,
-    val tileBitmap: TileBitmap?,
+    val tileImage: TileImage?,
     @TileState val state: Int,
     val alpha: Int,
 )
 
+/**
+ * Convert [Tile] to [TileSnapshot]
+ *
+ * @see com.github.panpf.zoomimage.core.common.test.subsampling.TileSnapshotTest.testToSnapshot
+ */
 fun Tile.toSnapshot(): TileSnapshot = TileSnapshot(
     coordinate = coordinate,
     srcRect = srcRect,
     sampleSize = sampleSize,
-    tileBitmap = tileBitmap,
+    tileImage = tileImage,
     state = state,
     alpha = animationState.alpha
 )

@@ -2,6 +2,7 @@
 
 Translations: [简体中文](locate_zh.md)
 
+> [!TIP]
 > * The following example takes precedence over the Compose version component for demonstration
 > * [ZoomState].zoomable is equivalent to [ZoomImageView].zoomable
 > * [ZoomState].subsampling is equivalent to [ZoomImageView].subsampling
@@ -21,13 +22,13 @@ parameters:
 example：
 
 ```kotlin
-val state: ZoomState by rememberZoomState()
+val zoomState: ZoomState by rememberZoomState()
 
 SketchZoomAsyncImage(
-    imageUri = "http://sample.com/sample.jpg",
+  imageUri = "https://sample.com/sample.jpeg",
     contentDescription = "view image",
     modifier = Modifier.fillMaxSize(),
-    state = state,
+    zoomState = zoomState,
 )
 
 val coroutineScope = rememberCoroutineScope()
@@ -35,9 +36,9 @@ Button(
     onClick = {
         // Locate to the center of the content and zoom to mediumScale if the current zoom factor is less than MediumScale
         coroutineScope.launch {
-            state.zoomable.locate(
-                contentPoint = state.zoomable.contentSize.center,
-                targetScale = state.zoomable.transform.scaleX.coerceAtLeast(state.zoomable.mediumScale),
+            zoomState.zoomable.locate(
+                contentPoint = zoomState.zoomable.contentSize.center,
+                targetScale = zoomState.zoomable.transform.scaleX.coerceAtLeast(zoomState.zoomable.mediumScale),
                 animated = true,
             )
         }
@@ -47,7 +48,7 @@ Button(
 }
 ```
 
-[ZoomImageView]: ../../zoomimage-view/src/main/java/com/github/panpf/zoomimage/ZoomImageView.kt
+[ZoomImageView]: ../../zoomimage-view/src/main/kotlin/com/github/panpf/zoomimage/ZoomImageView.kt
 
 [ZoomImage]: ../../zoomimage-compose/src/commonMain/kotlin/com/github/panpf/zoomimage/ZoomImage.kt
 

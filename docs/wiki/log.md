@@ -2,6 +2,7 @@
 
 Translations: [简体中文](log_zh.md)
 
+> [!TIP]
 > * The following example takes precedence over the Compose version component for demonstration
 > * [ZoomState].zoomable is equivalent to [ZoomImageView].zoomable
 > * [ZoomState].subsampling is equivalent to [ZoomImageView].subsampling
@@ -22,17 +23,17 @@ it to expand the output range of the log
 example：
 
 ```kotlin
-val state: ZoomState by rememberZoomState()
+val zoomState: ZoomState by rememberZoomState()
 
-LaunchEffect(Unit) {
-    state.logger.level = Logger.DEBUG
+LaunchEffect(zoomState.logger) {
+    zoomState.logger.level = Logger.DEBUG
 }
 
 SketchZoomAsyncImage(
-    imageUri = "http://sample.com/sample.jpg",
+    imageUri = "https://sample.com/sample.jpeg",
     contentDescription = "view image",
     modifier = Modifier.fillMaxSize(),
-    state = state,
+    zoomState = zoomState,
 )
 ```
 
@@ -45,22 +46,22 @@ console, you can modify it to output logs elsewhere
 example：
 
 ```kotlin
-val state: ZoomState by rememberZoomState()
+val zoomState: ZoomState by rememberZoomState()
 
-state.logger.pipeline = MyLoggerPipeline()
+zoomState.logger.pipeline = MyLoggerPipeline()
 
 SketchZoomAsyncImage(
-    imageUri = "http://sample.com/sample.jpg",
+    imageUri = "https://sample.com/sample.jpeg",
     contentDescription = "view image",
     modifier = Modifier.fillMaxSize(),
-    state = state,
+    zoomState = zoomState,
 )
 ```
 
-[ZoomImageView]: ../../zoomimage-view/src/main/java/com/github/panpf/zoomimage/ZoomImageView.kt
+[ZoomImageView]: ../../zoomimage-view/src/main/kotlin/com/github/panpf/zoomimage/ZoomImageView.kt
 
 [ZoomImage]: ../../zoomimage-compose/src/commonMain/kotlin/com/github/panpf/zoomimage/ZoomImage.kt
 
 [ZoomState]: ../../zoomimage-compose/src/commonMain/kotlin/com/github/panpf/zoomimage/compose/ZoomState.kt
 
-[Logger]: ../../zoomimage-core/src/commonMain/kotlin/com/github/panpf/zoomimage/util/Logger.kt
+[Logger]: ../../zoomimage-core/src/commonMain/kotlin/com/github/panpf/zoomimage/util/Logger.common.kt

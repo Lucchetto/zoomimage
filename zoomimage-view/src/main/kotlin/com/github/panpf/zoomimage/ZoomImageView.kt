@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,20 +26,21 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import androidx.appcompat.widget.AppCompatImageView
 import androidx.lifecycle.findViewTreeLifecycleOwner
+import com.github.panpf.zoomimage.subsampling.ImageInfo
+import com.github.panpf.zoomimage.subsampling.ImageSource
+import com.github.panpf.zoomimage.subsampling.SubsamplingImage
 import com.github.panpf.zoomimage.subsampling.TileAnimationSpec
-import com.github.panpf.zoomimage.util.AndroidLogPipeline
 import com.github.panpf.zoomimage.util.IntSizeCompat
 import com.github.panpf.zoomimage.util.Logger
+import com.github.panpf.zoomimage.util.isNotEmpty
 import com.github.panpf.zoomimage.view.R.styleable
-import com.github.panpf.zoomimage.view.internal.applyTransform
-import com.github.panpf.zoomimage.view.internal.findLifecycle
-import com.github.panpf.zoomimage.view.internal.intrinsicSize
-import com.github.panpf.zoomimage.view.internal.isAttachedToWindowCompat
-import com.github.panpf.zoomimage.view.internal.toAlignment
-import com.github.panpf.zoomimage.view.internal.toContentScale
 import com.github.panpf.zoomimage.view.subsampling.SubsamplingEngine
 import com.github.panpf.zoomimage.view.subsampling.internal.TileDrawHelper
-import com.github.panpf.zoomimage.view.subsampling.internal.ViewLifecycleStoppedController
+import com.github.panpf.zoomimage.view.util.applyTransform
+import com.github.panpf.zoomimage.view.util.findLifecycle
+import com.github.panpf.zoomimage.view.util.intrinsicSize
+import com.github.panpf.zoomimage.view.util.toAlignment
+import com.github.panpf.zoomimage.view.util.toContentScale
 import com.github.panpf.zoomimage.view.zoom.OnViewLongPressListener
 import com.github.panpf.zoomimage.view.zoom.OnViewTapListener
 import com.github.panpf.zoomimage.view.zoom.ScrollBarSpec
@@ -52,8 +53,8 @@ import com.github.panpf.zoomimage.zoom.ContentScaleCompat
 import com.github.panpf.zoomimage.zoom.ReadMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-
 
 /**
  * A native ImageView that zoom and subsampling huge images
@@ -62,10 +63,12 @@ import kotlinx.coroutines.launch
  *
  * ```kotlin
  * val zoomImageView = ZoomImageView(context)
- * zoomImageView.setImageResource(R.drawable.huge_image_thumbnail)
- * val imageSource = ImageSource.fromResource(context, R.drawable.huge_image)
- * zoomImageView.subsampling.setImageSource(imageSource)
+ * zoomImageView.setImageResource(R.drawable.huge_world_thumbnail)
+ * val imageSource = ImageSource.fromResource(context, R.raw.huge_world)
+ * zoomImageView.setSubsamplingImage(imageSource)
  * ```
+ *
+ * @see com.github.panpf.zoomimage.view.test.ZoomImageViewTest
  */
 open class ZoomImageView @JvmOverloads constructor(
     context: Context,
@@ -76,14 +79,14 @@ open class ZoomImageView @JvmOverloads constructor(
     protected val _zoomableEngine: ZoomableEngine?  // Used when the overridden method is called by the parent class constructor
     protected val _subsamplingEngine: SubsamplingEngine?  // Used when the overridden method is called by the parent class constructor
 
-    private val coroutineScope = CoroutineScope(Dispatchers.Main)
+    protected var coroutineScope: CoroutineScope? = null
     private val touchHelper: TouchHelper
     private val tileDrawHelper: TileDrawHelper
     private val cacheImageMatrix = Matrix()
     private var wrappedScaleType: ScaleType
     private var scrollBarHelper: ScrollBarHelper? = null
 
-    val logger = Logger(tag = "ZoomImageView", pipeline = AndroidLogPipeline())
+    val logger = newLogger()
 
     /**
      * Control the ability to zoom, pan, rotate
@@ -128,42 +131,99 @@ open class ZoomImageView @JvmOverloads constructor(
         }
 
     init {
-        /* ScaleType */
         val initScaleType = super.getScaleType()
         super.setScaleType(ScaleType.MATRIX)
         wrappedScaleType = initScaleType
 
-        /* ZoomableEngine */
         val zoomableEngine = ZoomableEngine(logger, this).apply {
-            this@ZoomImageView._zoomableEngine = this
             contentScaleState.value = initScaleType.toContentScale()
             alignmentState.value = initScaleType.toAlignment()
-            resetDrawableSize()
         }
-        touchHelper = TouchHelper(this, zoomableEngine)
+        val subsamplingEngine = SubsamplingEngine(zoomableEngine)
 
-        /* SubsamplingEngine */
-        val subsamplingEngine = SubsamplingEngine(logger, zoomableEngine, this).apply {
-            this@ZoomImageView._subsamplingEngine = this
-            post {
-                val view = this@ZoomImageView
-                if (view.isAttachedToWindowCompat) {
-                    val lifecycle =
-                        view.findViewTreeLifecycleOwner()?.lifecycle ?: view.context.findLifecycle()
-                    if (lifecycle != null) {
-                        stoppedController = ViewLifecycleStoppedController(view, lifecycle)
-                    }
+        this._subsamplingEngine = subsamplingEngine
+        this._zoomableEngine = zoomableEngine
+        this.tileDrawHelper = TileDrawHelper(logger, this, zoomableEngine, subsamplingEngine)
+        this.touchHelper = TouchHelper(this, zoomableEngine)
+
+        resetScrollBarHelper()
+        parseAttrs(attrs)
+        resetContentSize()
+        setupLifecycle()
+    }
+
+
+    /* ********************************* Interact with consumers ******************************** */
+
+    /**
+     * Set subsampling image
+     */
+    fun setSubsamplingImage(subsamplingImage: SubsamplingImage?): Boolean {
+        return subsampling.setImage(subsamplingImage)
+    }
+
+    /**
+     * Set up an image source from which image tile are loaded
+     */
+    fun setSubsamplingImage(
+        imageSource: ImageSource.Factory?,
+        imageInfo: ImageInfo? = null
+    ): Boolean {
+        return subsampling.setImage(imageSource, imageInfo)
+    }
+
+    /**
+     * Set up an image source from which image tile are loaded
+     */
+    fun setSubsamplingImage(imageSource: ImageSource?, imageInfo: ImageInfo? = null): Boolean {
+        return subsampling.setImage(imageSource, imageInfo)
+    }
+
+    /**
+     * Set up an image source from which image tile are loaded
+     */
+    @Deprecated(
+        message = "Use setSubsamplingImage(ImageSource?, ImageInfo?) instead",
+        replaceWith = ReplaceWith("setSubsamplingImage(imageSource)"),
+        level = DeprecationLevel.WARNING
+    )
+    fun setImageSource(imageSource: ImageSource.Factory?): Boolean {
+        return subsampling.setImage(imageSource)
+    }
+
+    /**
+     * Set up an image source from which image tile are loaded
+     */
+    @Deprecated(
+        message = "Use setSubsamplingImage(ImageSource?, ImageInfo?) instead",
+        replaceWith = ReplaceWith("setSubsamplingImage(imageSource)"),
+        level = DeprecationLevel.WARNING
+    )
+    fun setImageSource(imageSource: ImageSource?): Boolean {
+        return subsampling.setImage(imageSource)
+    }
+
+
+    /* ************************************** Internal ****************************************** */
+
+    private fun setupLifecycle() {
+        post {
+            val view = this@ZoomImageView
+            if (view.isAttachedToWindow) {
+                val lifecycle =
+                    view.findViewTreeLifecycleOwner()?.lifecycle ?: view.context.findLifecycle()
+                if (lifecycle != null) {
+                    _subsamplingEngine?.lifecycle = lifecycle
                 }
             }
         }
-        tileDrawHelper =
-            TileDrawHelper(logger, this@ZoomImageView, zoomableEngine, subsamplingEngine)
+    }
 
-        /* ScrollBar */
-        resetScrollBarHelper()
-
-        parseAttrs(attrs)
-
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        val coroutineScope = CoroutineScope(Dispatchers.Main).apply {
+            this@ZoomImageView.coroutineScope = this
+        }
         // Must be immediate, otherwise the user will see the image move quickly from the top to the center
         coroutineScope.launch(Dispatchers.Main.immediate) {
             zoomable.transformState.collect { transform ->
@@ -176,8 +236,13 @@ open class ZoomImageView @JvmOverloads constructor(
         }
     }
 
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        coroutineScope?.cancel("onDetachedFromWindow")
+        coroutineScope = null
+    }
 
-    /**************************************** Internal ********************************************/
+    protected open fun newLogger(): Logger = Logger(tag = "ZoomImageView")
 
     private fun parseAttrs(attrs: AttributeSet?) {
         val array = context.obtainStyledAttributes(attrs, styleable.ZoomImageView)
@@ -238,15 +303,28 @@ open class ZoomImageView @JvmOverloads constructor(
                     limitOffsetWithinBaseVisibleRect
             }
 
+            if (array.hasValue(styleable.ZoomImageView_readMode)) {
+                val readModeCode = array.getInt(styleable.ZoomImageView_readMode, -1)
+                zoomable.readModeState.value = when (readModeCode) {
+                    0 -> ReadMode.Default
+                    1 -> ReadMode.Default.copy(sizeType = ReadMode.SIZE_TYPE_HORIZONTAL)
+                    2 -> ReadMode.Default.copy(sizeType = ReadMode.SIZE_TYPE_VERTICAL)
+                    3 -> null
+                    else -> throw IllegalArgumentException("Unknown readModeCode: $readModeCode")
+                }
+            }
+
+
             if (array.hasValue(styleable.ZoomImageView_showTileBounds)) {
                 val showTileBounds = array.getBoolean(styleable.ZoomImageView_showTileBounds, false)
                 subsampling.showTileBoundsState.value = showTileBounds
             }
 
-            if (array.hasValue(styleable.ZoomImageView_pausedContinuousTransformType)) {
-                val pausedContinuousTransformType =
-                    array.getInt(styleable.ZoomImageView_pausedContinuousTransformType, 0)
-                subsampling.pausedContinuousTransformTypeState.value = pausedContinuousTransformType
+            if (array.hasValue(styleable.ZoomImageView_pausedContinuousTransformTypes)) {
+                val pausedContinuousTransformTypes =
+                    array.getInt(styleable.ZoomImageView_pausedContinuousTransformTypes, 0)
+                subsampling.pausedContinuousTransformTypesState.value =
+                    pausedContinuousTransformTypes
             }
 
             if (array.hasValue(styleable.ZoomImageView_disabledBackgroundTiles)) {
@@ -261,10 +339,17 @@ open class ZoomImageView @JvmOverloads constructor(
                     if (tileAnimation) TileAnimationSpec.Default else TileAnimationSpec.None
             }
 
+
             val disabledScrollBar =
                 array.getBoolean(styleable.ZoomImageView_disabledScrollBar, false)
-            scrollBar = if (!disabledScrollBar) {
-                ScrollBarSpec(
+            if (disabledScrollBar) {
+                scrollBar = null
+            } else if (
+                array.hasValue(styleable.ZoomImageView_scrollBarColor)
+                || array.hasValue(styleable.ZoomImageView_scrollBarSize)
+                || array.hasValue(styleable.ZoomImageView_scrollBarMargin)
+            ) {
+                scrollBar = ScrollBarSpec(
                     color = array.getColor(
                         styleable.ZoomImageView_scrollBarColor,
                         ScrollBarSpec.DEFAULT_COLOR
@@ -278,33 +363,16 @@ open class ZoomImageView @JvmOverloads constructor(
                         ScrollBarSpec.DEFAULT_MARGIN * resources.displayMetrics.density
                     ),
                 )
-            } else {
-                null
-            }
-
-            if (array.hasValue(styleable.ZoomImageView_ignoreExifOrientation)) {
-                val ignoreExifOrientation =
-                    array.getBoolean(styleable.ZoomImageView_ignoreExifOrientation, false)
-                subsampling.ignoreExifOrientationState.value = ignoreExifOrientation
-            }
-
-            if (array.hasValue(styleable.ZoomImageView_readMode)) {
-                val readModeCode = array.getInt(styleable.ZoomImageView_readMode, -1)
-                zoomable.readModeState.value = when (readModeCode) {
-                    0 -> ReadMode.Default
-                    1 -> ReadMode.Default.copy(sizeType = ReadMode.SIZE_TYPE_HORIZONTAL)
-                    2 -> ReadMode.Default.copy(sizeType = ReadMode.SIZE_TYPE_VERTICAL)
-                    3 -> null
-                    else -> throw IllegalArgumentException("Unknown readModeCode: $readModeCode")
-                }
             }
         } finally {
             array.recycle()
         }
     }
 
-    private fun resetDrawableSize() {
-        _zoomableEngine?.contentSizeState?.value = drawable?.intrinsicSize() ?: IntSizeCompat.Zero
+    private fun resetContentSize() {
+        _zoomableEngine?.contentSizeState?.value = drawable?.intrinsicSize()
+            ?.takeIf { it.isNotEmpty() }
+            ?: IntSizeCompat.Zero
     }
 
     private fun resetScrollBarHelper() {
@@ -335,7 +403,7 @@ open class ZoomImageView @JvmOverloads constructor(
     }
 
     open fun onDrawableChanged(oldDrawable: Drawable?, newDrawable: Drawable?) {
-        resetDrawableSize()
+        resetContentSize()
     }
 
     override fun setScaleType(scaleType: ScaleType) {
@@ -354,7 +422,7 @@ open class ZoomImageView @JvmOverloads constructor(
     }
 
     override fun setImageMatrix(matrix: Matrix?) {
-        logger.w("setImageMatrix() is intercepted")
+        logger.w("ZoomImageView. setImageMatrix() is intercepted")
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {

@@ -1,43 +1,21 @@
 plugins {
-    alias(libs.plugins.com.android.library)
-    alias(libs.plugins.org.jetbrains.kotlin.android)
+    id("com.android.library")
+    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
-android {
-    namespace = "com.github.panpf.zoomimage.compose.glide"
-    compileSdk = property("compileSdk").toString().toInt()
-
-    defaultConfig {
-        minSdk = property("minSdk21").toString().toInt()
-
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    }
+androidLibrary(nameSpace = "com.github.panpf.zoomimage.compose.glide") {
     buildFeatures {
         compose = true
-    }
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.versions.androidx.compose.compiler.get()
-    }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
-    }
-    kotlinOptions {
-        jvmTarget = "1.8"
     }
 }
 
 dependencies {
-    api(project(":zoomimage-compose"))
-    api(project(":zoomimage-core-glide"))
+    api(projects.zoomimageCompose)
+    api(projects.zoomimageCoreGlide)
     api(libs.glide.ktx)
-    api(libs.google.drawablepainer)
+    api(libs.google.drawablepainter)
+    api(libs.kotlinx.collections.immutable)
 
-    debugImplementation(libs.androidx.compose.ui.tooling)
-    debugImplementation(libs.androidx.compose.ui.test.manifest)
-
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.test.ext.junit)
-    androidTestImplementation(libs.androidx.test.runner)
-    androidTestImplementation(libs.androidx.test.rules)
+    androidTestImplementation(projects.internal.testCompose)
 }

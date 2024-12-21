@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ package com.github.panpf.zoomimage.zoom
 
 import com.github.panpf.zoomimage.util.IntSizeCompat
 import com.github.panpf.zoomimage.util.ScaleFactorCompat
-import com.github.panpf.zoomimage.util.internal.format
+import com.github.panpf.zoomimage.util.format
 import com.github.panpf.zoomimage.util.times
 import kotlin.math.max
 
@@ -26,7 +26,7 @@ import kotlin.math.max
  * Read mode allows long text images to be displayed in a way that fills the screen at the beginning and is positioned at the beginning of the image,
  * so that users can directly start read the content of the image without double-clicking to enlarge and then sliding to the beginning position
  *
- * @see [com.github.panpf.zoomimage.core.test.zoom.ReadModeTest]
+ * @see com.github.panpf.zoomimage.core.common.test.zoom.ReadModeTest
  */
 data class ReadMode(
     /**
@@ -88,6 +88,8 @@ data class ReadMode(
      * When contentSize and containerSize are in the same direction,
      * read mode can be used when the difference multiple is greater than [sameDirectionMultiple],
      * otherwise read mode can be used when the difference multiple is greater than [notSameDirectionMultiple]
+     *
+     * @see com.github.panpf.zoomimage.core.common.test.zoom.LongImageDeciderTest
      */
     class LongImageDecider(
         val sameDirectionMultiple: Float = 2.5f,
@@ -119,7 +121,7 @@ data class ReadMode(
 
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
-            if (javaClass != other?.javaClass) return false
+            if (other == null || this::class != other::class) return false
             other as LongImageDecider
             if (sameDirectionMultiple != other.sameDirectionMultiple) return false
             if (notSameDirectionMultiple != other.notSameDirectionMultiple) return false

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,13 +17,10 @@
 package com.github.panpf.zoomimage.view.zoom.internal
 
 import android.view.MotionEvent
-import android.view.ScaleGestureDetector
-import android.view.ScaleGestureDetector.OnScaleGestureListener
 import android.view.VelocityTracker
 import android.view.View
 import android.view.ViewConfiguration
 import com.github.panpf.zoomimage.util.OffsetCompat
-import com.github.panpf.zoomimage.view.internal.getPointerIndex
 import java.lang.Float.isInfinite
 import java.lang.Float.isNaN
 import kotlin.math.abs
@@ -42,7 +39,7 @@ internal class ScaleDragGestureDetector(
 
     private val touchSlop: Float
     private val minimumVelocity: Float
-    private val scaleDetector: ScaleGestureDetector
+    private val scaleDetector: FasterScaleGestureDetector
 
     private var firstTouch: OffsetCompat? = null
     private var lastTouch: OffsetCompat? = null
@@ -61,8 +58,10 @@ internal class ScaleDragGestureDetector(
         val configuration = ViewConfiguration.get(view.context)
         minimumVelocity = configuration.scaledMinimumFlingVelocity.toFloat()
         touchSlop = configuration.scaledTouchSlop.toFloat()
-        scaleDetector = ScaleGestureDetector(view.context, object : OnScaleGestureListener {
-            override fun onScale(detector: ScaleGestureDetector): Boolean {
+        scaleDetector = FasterScaleGestureDetector(
+            view.context,
+            object : FasterScaleGestureDetector.OnScaleGestureListener {
+                override fun onScale(detector: FasterScaleGestureDetector): Boolean {
                 val scaleFactor = detector.scaleFactor
                     .takeIf { !isNaN(it) && !isInfinite(it) }
                     ?: return false
@@ -87,12 +86,12 @@ internal class ScaleDragGestureDetector(
                 return true
             }
 
-            override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+                override fun onScaleBegin(detector: FasterScaleGestureDetector): Boolean {
                 view.parent.requestDisallowInterceptTouchEvent(true)
                 return true
             }
 
-            override fun onScaleEnd(detector: ScaleGestureDetector) {
+                override fun onScaleEnd(detector: FasterScaleGestureDetector) {
 
             }
         })
@@ -187,7 +186,7 @@ internal class ScaleDragGestureDetector(
                 // Ignore deprecation, ACTION_POINTER_ID_MASK and
                 // ACTION_POINTER_ID_SHIFT has same value and are deprecated
                 // You can have either deprecation or lint target api warning
-                val pointerIndex = getPointerIndex(ev.action)
+                val pointerIndex = ev.action and MotionEvent.ACTION_POINTER_INDEX_MASK shr MotionEvent.ACTION_POINTER_INDEX_SHIFT
                 val pointerId = ev.getPointerId(pointerIndex)
                 if (pointerId == activePointerId) {
                     // This was our active pointer going up. Choose a new

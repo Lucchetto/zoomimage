@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,9 +21,9 @@ import com.github.panpf.zoomimage.util.IntSizeCompat
 /**
  * Image information
  *
- * @see [com.github.panpf.zoomimage.core.test.subsampling.ImageInfoTest]
+ * @see com.github.panpf.zoomimage.core.common.test.subsampling.ImageInfoTest
  */
-data class ImageInfo constructor(
+data class ImageInfo(
     /**
      * Image size
      */
@@ -67,9 +67,7 @@ data class ImageInfo constructor(
         mimeType: String = this.mimeType,
     ): ImageInfo = ImageInfo(width, height, mimeType)
 
-    override fun toString(): String {
-        return "ImageInfo(size=${width}x$height, mimeType='$mimeType')"
-    }
-
     fun toShortString(): String = "(${width}x$height,'$mimeType')"
+
+    override fun toString(): String = "ImageInfo(size=${width}x$height, mimeType='$mimeType')"
 }

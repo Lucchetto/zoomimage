@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,8 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Used to configure the style of the scroll bar
+ *
+ * @see com.github.panpf.zoomimage.compose.common.test.zoom.ScrollBarSpecTest
  */
 @Immutable
 data class ScrollBarSpec(

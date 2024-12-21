@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,16 +16,11 @@
 
 package com.github.panpf.zoomimage.subsampling
 
-import androidx.annotation.WorkerThread
-import java.io.ByteArrayInputStream
-import java.io.File
-import java.io.FileInputStream
-import java.io.InputStream
+import com.github.panpf.zoomimage.annotation.WorkerThread
+import okio.Source
 
 /**
  * Image source for subsampling.
- *
- * @see [com.github.panpf.zoomimage.core.test.subsampling.ImageSourceTest]
  */
 interface ImageSource {
 
@@ -38,76 +33,52 @@ interface ImageSource {
      * Open an input stream for the image.
      */
     @WorkerThread
-    fun openInputStream(): Result<InputStream>
+    fun openSource(): Source
 
-    companion object {
-
-        /**
-         * Create an image source from a file.
-         */
-        fun fromFile(file: File): FileImageSource {
-            return FileImageSource(file)
-        }
+    interface Factory {
 
         /**
-         * Create an image source from a ByteArray.
+         * Unique key for this image source.
          */
-        fun fromByteArray(byteArray: ByteArray): ByteArrayImageSource {
-            return ByteArrayImageSource(byteArray)
+        val key: String
+
+        @WorkerThread
+        suspend fun create(): ImageSource
+    }
+
+    companion object
+
+    /**
+     * Wrapper factory
+     *
+     * @see com.github.panpf.zoomimage.core.common.test.subsampling.ImageSourceTest
+     */
+    class WrapperFactory(val imageSource: ImageSource) : Factory {
+
+        override val key: String = imageSource.key
+
+        override suspend fun create(): ImageSource = imageSource
+
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other == null || this::class != other::class) return false
+            other as WrapperFactory
+            return imageSource == other.imageSource
+        }
+
+        override fun hashCode(): Int {
+            return imageSource.hashCode()
+        }
+
+        override fun toString(): String {
+            return "WrapperFactory($imageSource)"
         }
     }
 }
 
-class ByteArrayImageSource(val byteArray: ByteArray) : ImageSource {
-
-    override val key: String = byteArray.toString()
-
-    override fun openInputStream(): Result<InputStream> = kotlin.runCatching {
-        ByteArrayInputStream(byteArray)
-    }
-
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (javaClass != other?.javaClass) return false
-        other as ByteArrayImageSource
-        if (byteArray != other.byteArray) return false
-        return true
-    }
-
-    override fun hashCode(): Int {
-        var result = byteArray.hashCode()
-        result = 31 * result + key.hashCode()
-        return result
-    }
-
-    override fun toString(): String {
-        return "ByteArrayImageSource('$byteArray')"
-    }
-}
-
-class FileImageSource(val file: File) : ImageSource {
-
-    override val key: String = file.path
-
-    override fun openInputStream(): Result<InputStream> = kotlin.runCatching {
-        FileInputStream(file)
-    }
-
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (javaClass != other?.javaClass) return false
-        other as FileImageSource
-        if (file != other.file) return false
-        return true
-    }
-
-    override fun hashCode(): Int {
-        var result = file.hashCode()
-        result = 31 * result + key.hashCode()
-        return result
-    }
-
-    override fun toString(): String {
-        return "FileImageSource('$file')"
-    }
-}
+/**
+ * Convert [ImageSource] to [ImageSource.Factory]
+ *
+ * @see com.github.panpf.zoomimage.core.common.test.subsampling.ImageSourceTest.testToFactory
+ */
+fun ImageSource.toFactory(): ImageSource.Factory = ImageSource.WrapperFactory(this)

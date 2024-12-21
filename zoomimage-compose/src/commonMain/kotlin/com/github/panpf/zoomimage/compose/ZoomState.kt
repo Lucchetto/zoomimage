@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,15 +23,22 @@ import com.github.panpf.zoomimage.compose.subsampling.SubsamplingState
 import com.github.panpf.zoomimage.compose.subsampling.rememberSubsamplingState
 import com.github.panpf.zoomimage.compose.zoom.ZoomableState
 import com.github.panpf.zoomimage.compose.zoom.rememberZoomableState
+import com.github.panpf.zoomimage.subsampling.ImageInfo
+import com.github.panpf.zoomimage.subsampling.ImageSource
+import com.github.panpf.zoomimage.subsampling.SubsamplingImage
 import com.github.panpf.zoomimage.util.Logger
+import com.github.panpf.zoomimage.util.Logger.Level
 
 /**
  * Creates and remember a [ZoomState]
+ *
+ * @see com.github.panpf.zoomimage.compose.common.test.ZoomStateTest.testRememberZoomState
  */
 @Composable
-fun rememberZoomState(logger: Logger = rememberZoomImageLogger()): ZoomState {
+fun rememberZoomState(logLevel: Level? = null): ZoomState {
+    val logger = rememberZoomImageLogger(level = logLevel)
     val zoomableState = rememberZoomableState(logger)
-    val subsamplingState = rememberSubsamplingState(logger, zoomableState)
+    val subsamplingState = rememberSubsamplingState(zoomableState)
     return remember(logger, zoomableState, subsamplingState) {
         ZoomState(logger, zoomableState, subsamplingState)
     }
@@ -39,9 +46,11 @@ fun rememberZoomState(logger: Logger = rememberZoomImageLogger()): ZoomState {
 
 /**
  * Used to control the state of scaling, translation, rotation, and subsampling
+ *
+ * @see com.github.panpf.zoomimage.compose.common.test.ZoomStateTest
  */
 @Stable
-class ZoomState(
+open class ZoomState(
     /**
      * Used to print log
      */
@@ -58,7 +67,51 @@ class ZoomState(
     val subsampling: SubsamplingState,
 ) {
 
-    override fun toString(): String {
-        return "ZoomState(logger=${logger}, zoomable=${zoomable}, subsampling=${subsampling})"
+    /**
+     * Set subsampling image
+     */
+    fun setSubsamplingImage(subsamplingImage: SubsamplingImage?): Boolean {
+        return subsampling.setImage(subsamplingImage)
+    }
+
+    /**
+     * Set subsampling image
+     */
+    fun setSubsamplingImage(
+        imageSource1: ImageSource.Factory?,
+        imageInfo: ImageInfo? = null
+    ): Boolean {
+        return subsampling.setImage(imageSource1, imageInfo)
+    }
+
+    /**
+     * Set subsampling image
+     */
+    fun setSubsamplingImage(imageSource: ImageSource?, imageInfo: ImageInfo? = null): Boolean {
+        return subsampling.setImage(imageSource, imageInfo)
+    }
+
+    /**
+     * Set subsampling image
+     */
+    @Deprecated(
+        message = "Use setSubsamplingImage(ImageSource.Factory?, ImageInfo?) instead",
+        replaceWith = ReplaceWith("setSubsamplingImage(imageSource)"),
+        level = DeprecationLevel.WARNING
+    )
+    fun setImageSource(imageSource1: ImageSource.Factory?): Boolean {
+        return subsampling.setImage(imageSource1)
+    }
+
+    /**
+     * Set subsampling image
+     */
+    @Deprecated(
+        message = "Use setSubsamplingImage(ImageSource?, ImageInfo?) instead",
+        replaceWith = ReplaceWith("setSubsamplingImage(imageSource)"),
+        level = DeprecationLevel.WARNING
+    )
+    fun setImageSource(imageSource: ImageSource?): Boolean {
+        return subsampling.setImage(imageSource)
     }
 }

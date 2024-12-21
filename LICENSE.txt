@@ -187,7 +187,7 @@
       same "printed page" as the copyright notice for easier
       identification within third-party archives.
 
-   Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+   Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -202,7 +202,7 @@
    limitations under the License.
 
    -----------------------------------------------------------------------------
-   License for module zoomimage-compose-coil-core, zoomimage-compose-coil
+   License for module zoomimage-compose-coil[2|3]-core, zoomimage-compose[2|3]-coil
 
    Copyright 2023 Coil Contributors
 

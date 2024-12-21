@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,120 +28,110 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
-import com.github.panpf.zoomimage.compose.internal.isEmpty
-import com.github.panpf.zoomimage.compose.internal.toCompat
-import com.github.panpf.zoomimage.compose.internal.toHexString
-import com.github.panpf.zoomimage.compose.internal.toPlatform
-import com.github.panpf.zoomimage.compose.internal.toShortString
-import com.github.panpf.zoomimage.compose.rememberZoomImageLogger
-import com.github.panpf.zoomimage.compose.subsampling.internal.createTileBitmapConvertor
-import com.github.panpf.zoomimage.compose.subsampling.internal.defaultStoppedController
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.Lifecycle.State.STARTED
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.github.panpf.zoomimage.compose.util.isEmpty
+import com.github.panpf.zoomimage.compose.util.toCompat
+import com.github.panpf.zoomimage.compose.util.toPlatform
+import com.github.panpf.zoomimage.compose.util.toShortString
 import com.github.panpf.zoomimage.compose.zoom.ZoomableState
-import com.github.panpf.zoomimage.subsampling.ExifOrientation
 import com.github.panpf.zoomimage.subsampling.ImageInfo
 import com.github.panpf.zoomimage.subsampling.ImageSource
-import com.github.panpf.zoomimage.subsampling.StoppedController
+import com.github.panpf.zoomimage.subsampling.RegionDecoder
+import com.github.panpf.zoomimage.subsampling.SubsamplingImage
 import com.github.panpf.zoomimage.subsampling.TileAnimationSpec
-import com.github.panpf.zoomimage.subsampling.TileBitmapCache
-import com.github.panpf.zoomimage.subsampling.TileBitmapCacheSpec
-import com.github.panpf.zoomimage.subsampling.TileBitmapPool
-import com.github.panpf.zoomimage.subsampling.TileBitmapReuseSpec
+import com.github.panpf.zoomimage.subsampling.TileImageCache
+import com.github.panpf.zoomimage.subsampling.TileImageCacheSpec
 import com.github.panpf.zoomimage.subsampling.TileSnapshot
-import com.github.panpf.zoomimage.subsampling.internal.CreateTileDecoderException
-import com.github.panpf.zoomimage.subsampling.internal.TileBitmapCacheHelper
 import com.github.panpf.zoomimage.subsampling.internal.TileDecoder
+import com.github.panpf.zoomimage.subsampling.internal.TileImageCacheHelper
 import com.github.panpf.zoomimage.subsampling.internal.TileManager
-import com.github.panpf.zoomimage.subsampling.internal.TileManager.Companion.DefaultPausedContinuousTransformType
+import com.github.panpf.zoomimage.subsampling.internal.TileManager.Companion.DefaultPausedContinuousTransformTypes
 import com.github.panpf.zoomimage.subsampling.internal.calculatePreferredTileSize
-import com.github.panpf.zoomimage.subsampling.internal.createTileBitmapReuseHelper
-import com.github.panpf.zoomimage.subsampling.internal.decodeAndCreateTileDecoder
+import com.github.panpf.zoomimage.subsampling.internal.checkNewPreferredTileSize
+import com.github.panpf.zoomimage.subsampling.internal.createTileDecoder
 import com.github.panpf.zoomimage.subsampling.internal.toIntroString
 import com.github.panpf.zoomimage.util.IntSizeCompat
 import com.github.panpf.zoomimage.util.Logger
+import com.github.panpf.zoomimage.util.ioCoroutineDispatcher
 import com.github.panpf.zoomimage.zoom.ContinuousTransformType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlin.math.abs
 import kotlin.math.roundToInt
-
 
 /**
  * Creates and remember a [SubsamplingState] that can be used to subsampling of the content.
+ *
+ * @see com.github.panpf.zoomimage.compose.common.test.subsampling.SubsamplingStateTest.testRememberSubsamplingState
  */
 @Composable
-fun rememberSubsamplingState(
-    logger: Logger = rememberZoomImageLogger(),
-    zoomableState: ZoomableState
-): SubsamplingState {
-    val defaultStopAutoController = defaultStoppedController()
-    val subsamplingState = remember(logger, zoomableState) {
-        SubsamplingState(logger, zoomableState).apply {
-            stoppedController = defaultStopAutoController
-        }
+fun rememberSubsamplingState(zoomableState: ZoomableState): SubsamplingState {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val subsamplingState = remember(zoomableState, lifecycle) {
+        SubsamplingState(zoomableState, lifecycle)
     }
     return subsamplingState
 }
 
 /**
  * A state object that can be used to subsampling of the content.
+ *
+ * @see com.github.panpf.zoomimage.compose.common.test.subsampling.SubsamplingStateTest
  */
 @Stable
-class SubsamplingState constructor(logger: Logger, private val zoomableState: ZoomableState) :
-    RememberObserver {
-
-    val logger: Logger = logger.newLogger(module = "SubsamplingState@${logger.toHexString()}")
+class SubsamplingState(
+    val zoomableState: ZoomableState,
+    val lifecycle: Lifecycle
+) : RememberObserver {
 
     private var coroutineScope: CoroutineScope? = null
-    private var imageSource: ImageSource? = null
     private var tileManager: TileManager? = null
     private var tileDecoder: TileDecoder? = null
-    private var lastResetTileDecoderJob: Job? = null
-    private val tileBitmapCacheSpec = TileBitmapCacheSpec()
-    private val tileBitmapReuseSpec = TileBitmapReuseSpec()
-    private val tileBitmapCacheHelper = TileBitmapCacheHelper(this.logger, tileBitmapCacheSpec)
-    private val tileBitmapReuseHelper =
-        createTileBitmapReuseHelper(this.logger, tileBitmapReuseSpec)
-    private val tileBitmapConvertor = createTileBitmapConvertor()
+    private var resetTileDecoderJob: Job? = null
+    private val tileImageCacheSpec = TileImageCacheSpec()
+    private val tileImageCacheHelper = TileImageCacheHelper(tileImageCacheSpec)
+    private val tileImageConvertor = ComposeTileImageConvertor()
     private val refreshTilesFlow = MutableSharedFlow<String>()
     private var preferredTileSize: IntSize by mutableStateOf(IntSize.Zero)
     private var contentSize: IntSize by mutableStateOf(IntSize.Zero)
     private var rememberedCount = 0
+    private val stoppedLifecycleObserver = LifecycleEventObserver { _, _ ->
+        val stopped = !lifecycle.currentState.isAtLeast(STARTED)
+        this@SubsamplingState.stopped = stopped
+        if (stopped) {
+            tileManager?.clean("stopped")
+        }
+        coroutineScope?.launch {
+            refreshTilesFlow.emit(if (stopped) "stopped" else "started")
+        }
+    }
 
-    var imageKey: String? = null
+
+    val logger: Logger = zoomableState.logger
+
+    var subsamplingImage: SubsamplingImage? = null
+        private set
 
 
     /* *********************************** Configurable properties ****************************** */
 
     /**
-     * If true, the Exif rotation information for the image is ignored
+     * Set up the TileImage memory cache container
      */
-    var ignoreExifOrientation: Boolean by mutableStateOf(false)
+    var tileImageCache: TileImageCache? by mutableStateOf(null)
 
     /**
-     * Set up the TileBitmap memory cache container
+     * If true, disabled TileImage memory cache
      */
-    var tileBitmapCache: TileBitmapCache? by mutableStateOf(null)
-
-    /**
-     * If true, disabled TileBitmap memory cache
-     */
-    var disabledTileBitmapCache: Boolean by mutableStateOf(false)
-
-    /**
-     * Set up a shared TileBitmap pool for the tile
-     */
-    var tileBitmapPool: TileBitmapPool? by mutableStateOf(null)
-
-    /**
-     * If true, TileBitmap reuse is disabled
-     */
-    var disabledTileBitmapReuse: Boolean by mutableStateOf(false)
+    var disabledTileImageCache: Boolean by mutableStateOf(false)
 
     /**
      * The animation spec for tile animation
@@ -153,7 +143,9 @@ class SubsamplingState constructor(logger: Logger, private val zoomableState: Zo
      *
      * @see com.github.panpf.zoomimage.zoom.ContinuousTransformType
      */
-    var pausedContinuousTransformType: Int by mutableIntStateOf(DefaultPausedContinuousTransformType)
+    var pausedContinuousTransformTypes: Int by mutableIntStateOf(
+        DefaultPausedContinuousTransformTypes
+    )
 
     /**
      * Disabling the background tile, which saves memory and improves performance, but when switching sampleSize,
@@ -168,33 +160,14 @@ class SubsamplingState constructor(logger: Logger, private val zoomableState: Zo
     var stopped by mutableStateOf(false)
 
     /**
-     * The stopped property controller, which can automatically stop and restart with the help of Lifecycle
-     */
-    var stoppedController: StoppedController? = null
-        set(value) {
-            if (field != value) {
-                field?.onDestroy()
-                field = value
-                value?.bindStoppedWrapper(object : StoppedController.StoppedWrapper {
-                    override var stopped: Boolean
-                        get() = this@SubsamplingState.stopped
-                        set(value) {
-                            this@SubsamplingState.stopped = value
-                            if (value) {
-                                tileManager?.clean("stopped")
-                            }
-                            coroutineScope?.launch {
-                                refreshTilesFlow.emit(if (value) "stopped" else "started")
-                            }
-                        }
-                })
-            }
-        }
-
-    /**
      * If true, the bounds of each tile is displayed
      */
     var showTileBounds: Boolean by mutableStateOf(false)
+
+    /**
+     * User-defined RegionDecoder
+     */
+    var regionDecoders: List<RegionDecoder.Factory> by mutableStateOf(emptyList())
 
 
     /* *********************************** Information properties ******************************* */
@@ -206,27 +179,15 @@ class SubsamplingState constructor(logger: Logger, private val zoomableState: Zo
         private set
 
     /**
-     * The exif information of the image
+     * Tile grid size map, key is sample size, value is tile grid size
      */
-    var exifOrientation: ExifOrientation? by mutableStateOf(null)
+    var tileGridSizeMap: Map<Int, IntOffset> by mutableStateOf(emptyMap())
         private set
 
     /**
      * Whether the image is ready for subsampling
      */
     var ready: Boolean by mutableStateOf(false)
-        private set
-
-    /**
-     * Foreground tiles, all tiles corresponding to the current sampleSize, this list will be updated when the sampleSize changes, when the loading state of any of the tiles and the progress of the animation changes
-     */
-    var foregroundTiles: List<TileSnapshot> by mutableStateOf(emptyList())
-        private set
-
-    /**
-     * Background tiles to avoid revealing the basemap during the process of switching sampleSize to load a new tile, the background tile will be emptied after the new tile is fully loaded and the transition animation is complete, the list of background tiles contains only tiles within the currently loaded area
-     */
-    var backgroundTiles: List<TileSnapshot> by mutableStateOf(emptyList())
         private set
 
     /**
@@ -242,27 +203,72 @@ class SubsamplingState constructor(logger: Logger, private val zoomableState: Zo
         private set
 
     /**
-     * Tile grid size map, key is sample size, value is tile grid size
+     * Foreground tiles, all tiles corresponding to the current sampleSize, this list will be updated when the sampleSize changes, when the loading state of any of the tiles and the progress of the animation changes
      */
-    var tileGridSizeMap: Map<Int, IntOffset> by mutableStateOf(emptyMap())
+    var foregroundTiles: List<TileSnapshot> by mutableStateOf(emptyList())
+        private set
+
+    /**
+     * Background tiles to avoid revealing the basemap during the process of switching sampleSize to load a new tile, the background tile will be emptied after the new tile is fully loaded and the transition animation is complete, the list of background tiles contains only tiles within the currently loaded area
+     */
+    var backgroundTiles: List<TileSnapshot> by mutableStateOf(emptyList())
         private set
 
 
     /* ********************************* Interact with consumers ******************************** */
 
     /**
-     * Set up an image source from which image tile are loaded
+     * Set subsampling image
      */
-    fun setImageSource(imageSource: ImageSource?): Boolean {
-        if (this.imageSource == imageSource) return false
-        logger.d { "setImageSource. '${this.imageSource?.key}' -> '${imageSource?.key}'" }
-        clean("setImageSource")
-        this.imageSource = imageSource
-        imageKey = imageSource?.key
+    fun setImage(subsamplingImage: SubsamplingImage?): Boolean {
+        if (this.subsamplingImage == subsamplingImage) return false
+        logger.d { "SubsamplingState. setImage. '${this.subsamplingImage}' -> '${subsamplingImage}'" }
+        clean("setImage")
+        this.subsamplingImage = subsamplingImage
         if (rememberedCount > 0) {
-            resetTileDecoder("setImageSource")
+            resetTileDecoder("setImage")
         }
         return true
+    }
+
+    /**
+     * Set subsampling image
+     */
+    fun setImage(imageSource: ImageSource.Factory?, imageInfo: ImageInfo? = null): Boolean {
+        return setImage(imageSource?.let { SubsamplingImage(it, imageInfo) })
+    }
+
+    /**
+     * Set subsampling image
+     */
+    fun setImage(imageSource: ImageSource?, imageInfo: ImageInfo? = null): Boolean {
+        return setImage(imageSource?.let {
+            SubsamplingImage(ImageSource.WrapperFactory(it), imageInfo)
+        })
+    }
+
+    /**
+     * Set up an image source from which image tile are loaded
+     */
+    @Deprecated(
+        message = "Use setImage(ImageSource.Factory?, ImageInfo?) instead",
+        replaceWith = ReplaceWith("setImage(imageSource)"),
+        level = DeprecationLevel.WARNING
+    )
+    fun setImageSource(imageSource: ImageSource.Factory?): Boolean {
+        return setImage(imageSource)
+    }
+
+    /**
+     * Set up an image source from which image tile are loaded
+     */
+    @Deprecated(
+        message = "Use setImage(ImageSource?, ImageInfo?) instead",
+        replaceWith = ReplaceWith("setImage(imageSource)"),
+        level = DeprecationLevel.WARNING
+    )
+    fun setImageSource(imageSource: ImageSource?): Boolean {
+        return setImage(imageSource)
     }
 
 
@@ -288,33 +294,18 @@ class SubsamplingState constructor(logger: Logger, private val zoomableState: Zo
             }
         }
         coroutineScope.launch(Dispatchers.Main.immediate) {
-            snapshotFlow { ignoreExifOrientation }.collect {
-                resetTileDecoder("ignoreExifOrientationChanged")
+            snapshotFlow { tileImageCache }.collect {
+                tileImageCacheSpec.tileImageCache = it
             }
         }
         coroutineScope.launch(Dispatchers.Main.immediate) {
-            snapshotFlow { tileBitmapCache }.collect {
-                tileBitmapCacheSpec.tileBitmapCache = it
+            snapshotFlow { disabledTileImageCache }.collect {
+                tileImageCacheSpec.disabled = it
             }
         }
         coroutineScope.launch(Dispatchers.Main.immediate) {
-            snapshotFlow { disabledTileBitmapCache }.collect {
-                tileBitmapCacheSpec.disabled = it
-            }
-        }
-        coroutineScope.launch(Dispatchers.Main.immediate) {
-            snapshotFlow { tileBitmapPool }.collect {
-                tileBitmapReuseSpec.tileBitmapPool = it
-            }
-        }
-        coroutineScope.launch(Dispatchers.Main.immediate) {
-            snapshotFlow { disabledTileBitmapReuse }.collect {
-                tileBitmapReuseSpec.disabled = it
-            }
-        }
-        coroutineScope.launch(Dispatchers.Main.immediate) {
-            snapshotFlow { pausedContinuousTransformType }.collect {
-                tileManager?.pausedContinuousTransformType = it
+            snapshotFlow { pausedContinuousTransformTypes }.collect {
+                tileManager?.pausedContinuousTransformTypes = it
             }
         }
         coroutineScope.launch(Dispatchers.Main.immediate) {
@@ -331,43 +322,29 @@ class SubsamplingState constructor(logger: Logger, private val zoomableState: Zo
         coroutineScope.launch {
             // Changes in containerSize cause a large chain reaction that can cause large memory fluctuations.
             // Size animations cause frequent changes in containerSize, so a delayed reset avoids this problem
+            @Suppress("OPT_IN_USAGE")
             snapshotFlow { zoomableState.containerSize }.debounce(80).collect {
-                val newTileSize = calculatePreferredTileSize(it.toCompat())
-                if (preferredTileSize.isEmpty()) {
-                    preferredTileSize = newTileSize.toPlatform()
-                } else if (abs(newTileSize.width - preferredTileSize.width) >=
-                    // When the width changes by more than 1x, the preferredTileSize is recalculated to reduce the need to reset the TileManager
-                    preferredTileSize.width * (if (newTileSize.width > preferredTileSize.width) 1f else 0.5f)
-                ) {
-                    preferredTileSize = newTileSize.toPlatform()
-                } else if (abs(newTileSize.height - preferredTileSize.height) >=
-                    preferredTileSize.height * (if (newTileSize.height > preferredTileSize.height) 1f else 0.5f)
-                ) {
-                    // When the height changes by more than 1x, the preferredTileSize is recalculated to reduce the need to reset the TileManager
-                    preferredTileSize = newTileSize.toPlatform()
+                val oldPreferredTileSize = this@SubsamplingState.preferredTileSize.toCompat()
+                val newPreferredTileSize = calculatePreferredTileSize(it.toCompat())
+                val checkPassed = checkNewPreferredTileSize(
+                    oldPreferredTileSize = oldPreferredTileSize,
+                    newPreferredTileSize = newPreferredTileSize
+                )
+                logger.d {
+                    "SubsamplingState. reset preferredTileSize. " +
+                            "oldPreferredTileSize=$oldPreferredTileSize, " +
+                            "newPreferredTileSize=$newPreferredTileSize, " +
+                            "checkPassed=$checkPassed. " +
+                            "'${subsamplingImage?.key}'"
+                }
+                if (checkPassed) {
+                    this@SubsamplingState.preferredTileSize = newPreferredTileSize.toPlatform()
                 }
             }
         }
         coroutineScope.launch {
             snapshotFlow { zoomableState.contentSize }.collect {
                 contentSize = it
-            }
-        }
-
-        coroutineScope.launch {
-            snapshotFlow { ready }.collect { ready ->
-                val imageInfo = imageInfo
-                val imageSize = if (ready && imageInfo != null)
-                    imageInfo.size else IntSizeCompat.Zero
-                zoomableState.contentOriginSize = imageSize.toPlatform()
-            }
-        }
-        coroutineScope.launch {
-            snapshotFlow { imageInfo }.collect { imageInfo ->
-                val ready = ready
-                val imageSize = if (ready && imageInfo != null)
-                    imageInfo.size else IntSizeCompat.Zero
-                zoomableState.contentOriginSize = imageSize.toPlatform()
             }
         }
 
@@ -404,6 +381,8 @@ class SubsamplingState constructor(logger: Logger, private val zoomableState: Zo
                 )
             }
         }
+
+        lifecycle.addObserver(stoppedLifecycleObserver)
     }
 
     override fun onAbandoned() = onForgotten()
@@ -421,121 +400,124 @@ class SubsamplingState constructor(logger: Logger, private val zoomableState: Zo
         }
 
         clean("onForgotten")
-        stoppedController?.onDestroy()
+        lifecycle.removeObserver(stoppedLifecycleObserver)
     }
 
     private fun resetTileDecoder(caller: String) {
         cleanTileManager("resetTileDecoder:$caller")
         cleanTileDecoder("resetTileDecoder:$caller")
 
-        val imageSource = imageSource
+        val subsamplingImage = subsamplingImage
         val contentSize = contentSize
-        if (imageSource == null || contentSize.isEmpty()) {
+        val coroutineScope = coroutineScope
+        if (subsamplingImage == null || contentSize.isEmpty() || coroutineScope == null) {
             logger.d {
-                "resetTileDecoder:$caller. failed. " +
-                        "imageSource=${imageSource}, " +
+                "SubsamplingState. resetTileDecoder:$caller. skipped. " +
+                        "parameters are not ready yet. " +
+                        "subsamplingImage=${subsamplingImage}, " +
                         "contentSize=${contentSize.toShortString()}, " +
-                        "'${imageKey}'"
+                        "coroutineScope=$coroutineScope"
             }
             return
         }
 
-        val ignoreExifOrientation = ignoreExifOrientation
-        lastResetTileDecoderJob = coroutineScope?.launch {
-            val result = withContext(Dispatchers.IO) {
-                decodeAndCreateTileDecoder(
-                    logger = logger,
-                    imageSource = imageSource,
-                    thumbnailSize = contentSize.toCompat(),
-                    ignoreExifOrientation = ignoreExifOrientation,
-                    tileBitmapReuseHelper = tileBitmapReuseHelper,
-                )
-            }
-            val newTileDecoder = result.getOrNull()
-            if (newTileDecoder != null) {
+        resetTileDecoderJob = coroutineScope.launch {
+            val tileDecoderResult = createTileDecoder(
+                logger = logger,
+                subsamplingImage = subsamplingImage,
+                contentSize = contentSize.toCompat(),
+                regionDecoders = regionDecoders,
+                onImageInfoPassed = {
+                    zoomableState.contentOriginSize = it.size.toPlatform()
+                }
+            )
+            if (tileDecoderResult.isFailure) {
                 logger.d {
-                    "resetTileDecoder:$caller. success. " +
-                            "contentSize=${contentSize.toShortString()}, " +
-                            "ignoreExifOrientation=${ignoreExifOrientation}. " +
-                            "imageInfo=${newTileDecoder.imageInfo.toShortString()}. " +
-                            "'${imageKey}'"
+                    "SubsamplingState. resetTileDecoder:$caller. failed. " +
+                            "${tileDecoderResult.exceptionOrNull()!!.message}. " +
+                            "'${subsamplingImage.key}'"
                 }
-                this@SubsamplingState.tileDecoder = newTileDecoder
-                this@SubsamplingState.imageInfo = newTileDecoder.imageInfo
-                this@SubsamplingState.exifOrientation = newTileDecoder.exifOrientation
-                resetTileManager(caller)
-            } else {
-                val exception = result.exceptionOrNull()!! as CreateTileDecoderException
-                this@SubsamplingState.imageInfo = exception.imageInfo
-                val level = if (exception.skipped) Logger.DEBUG else Logger.ERROR
-                val type = if (exception.skipped) "skipped" else "error"
-                logger.log(level) {
-                    "resetTileDecoder:$caller. $type, ${exception.message}. " +
-                            "contentSize: ${contentSize.toShortString()}, " +
-                            "ignoreExifOrientation=${ignoreExifOrientation}. " +
-                            "imageInfo: ${exception.imageInfo?.toShortString()}. " +
-                            "'${imageKey}'"
-                }
+                zoomableState.contentOriginSize = IntSize.Zero
+                return@launch
             }
-            lastResetTileDecoderJob = null
+
+            val tileDecoder = tileDecoderResult.getOrThrow()
+            val imageInfo = subsamplingImage.imageInfo ?: tileDecoder.imageInfo
+            this@SubsamplingState.imageInfo = imageInfo
+            this@SubsamplingState.tileDecoder = tileDecoder
+            logger.d {
+                "SubsamplingState. resetTileDecoder:$caller. success. " +
+                        "contentSize=${contentSize.toShortString()}, " +
+                        "imageInfo=${imageInfo.toShortString()}. " +
+                        "'${subsamplingImage.key}'"
+            }
+
+            resetTileManager(caller)
         }
     }
 
     private fun resetTileManager(caller: String) {
         cleanTileManager("resetTileManager:$caller")
 
-        val imageSource = imageSource
+        val subsamplingImage = subsamplingImage
         val tileDecoder = tileDecoder
         val imageInfo = imageInfo
         val contentSize = contentSize
         val preferredTileSize = preferredTileSize
-        if (imageSource == null || tileDecoder == null || imageInfo == null || preferredTileSize.isEmpty() || contentSize.isEmpty()) {
+        if (subsamplingImage == null || tileDecoder == null || imageInfo == null || preferredTileSize.isEmpty() || contentSize.isEmpty()) {
             logger.d {
-                "resetTileManager:$caller. failed. " +
-                        "imageSource=${imageSource}, " +
+                "SubsamplingState. resetTileManager:$caller. failed. " +
+                        "subsamplingImage=${subsamplingImage}, " +
                         "contentSize=${contentSize.toShortString()}, " +
                         "preferredTileSize=${preferredTileSize.toShortString()}, " +
                         "tileDecoder=${tileDecoder}, " +
-                        "'${imageKey}'"
+                        "imageInfo=${imageInfo}. " +
+                        "'${subsamplingImage?.key}'"
             }
             return
         }
 
         val tileManager = TileManager(
             logger = logger,
+            subsamplingImage = subsamplingImage,
             tileDecoder = tileDecoder,
-            tileBitmapConvertor = tileBitmapConvertor,
-            imageSource = imageSource,
+            tileImageConvertor = tileImageConvertor,
             contentSize = contentSize.toCompat(),
             preferredTileSize = preferredTileSize.toCompat(),
-            tileBitmapCacheHelper = tileBitmapCacheHelper,
-            tileBitmapReuseHelper = tileBitmapReuseHelper,
+            tileImageCacheHelper = tileImageCacheHelper,
             imageInfo = imageInfo,
             onTileChanged = { manager ->
-                backgroundTiles = manager.backgroundTiles
-                foregroundTiles = manager.foregroundTiles
+                if (this@SubsamplingState.tileManager == manager) {
+                    backgroundTiles = manager.backgroundTiles
+                    foregroundTiles = manager.foregroundTiles
+                }
             },
             onSampleSizeChanged = { manager ->
-                sampleSize = manager.sampleSize
+                if (this@SubsamplingState.tileManager == manager) {
+                    sampleSize = manager.sampleSize
+                }
             },
-            onImageLoadRectChanged = {
-                imageLoadRect = it.imageLoadRect.toPlatform()
+            onImageLoadRectChanged = { manager ->
+                if (this@SubsamplingState.tileManager == manager) {
+                    imageLoadRect = manager.imageLoadRect.toPlatform()
+                }
             }
-        ).apply {
-            pausedContinuousTransformType = this@SubsamplingState.pausedContinuousTransformType
-            disabledBackgroundTiles = this@SubsamplingState.disabledBackgroundTiles
-            tileAnimationSpec = this@SubsamplingState.tileAnimationSpec
-        }
-        tileGridSizeMap = tileManager.sortedTileGridMap.mapValues { entry ->
-            entry.value.last().coordinate.let { IntOffset(it.x + 1, it.y + 1) }
+        )
+        tileManager.pausedContinuousTransformTypes =
+            this@SubsamplingState.pausedContinuousTransformTypes
+        tileManager.disabledBackgroundTiles = this@SubsamplingState.disabledBackgroundTiles
+        tileManager.tileAnimationSpec = this@SubsamplingState.tileAnimationSpec
+
+        tileGridSizeMap = tileManager.sortedTileGridMap.associate { entry ->
+            entry.sampleSize to entry.tiles.last().coordinate.let { IntOffset(it.x + 1, it.y + 1) }
         }
         logger.d {
-            "resetTileManager:$caller. success. " +
+            "SubsamplingState. resetTileManager:$caller. success. " +
                     "contentSize=${contentSize.toShortString()}, " +
                     "preferredTileSize=${preferredTileSize.toShortString()}, " +
                     "imageInfo=${imageInfo.toShortString()}. " +
                     "tileGridMap=${tileManager.sortedTileGridMap.toIntroString()}. " +
-                    "'${imageKey}'"
+                    "'${subsamplingImage.key}'"
         }
         this@SubsamplingState.tileManager = tileManager
         refreshReadyState("resetTileManager:$caller")
@@ -550,7 +532,7 @@ class SubsamplingState constructor(logger: Logger, private val zoomableState: Zo
     ) {
         val tileManager = tileManager ?: return
         if (stopped) {
-            logger.d { "refreshTiles:$caller. interrupted, stopped. '${imageKey}'" }
+            logger.d { "SubsamplingState. refreshTiles:$caller. interrupted, stopped. '${subsamplingImage?.key}'" }
             return
         }
         tileManager.refreshTiles(
@@ -564,7 +546,7 @@ class SubsamplingState constructor(logger: Logger, private val zoomableState: Zo
 
     private fun refreshReadyState(caller: String) {
         val newReady = imageInfo != null && tileDecoder != null && tileManager != null
-        logger.d { "refreshReadyState:$caller. ready=$newReady. '${imageKey}'" }
+        logger.d { "SubsamplingState. refreshReadyState:$caller. ready=$newReady. '${subsamplingImage?.key}'" }
         ready = newReady
         coroutineScope?.launch {
             refreshTilesFlow.emit("refreshReadyState:$caller")
@@ -572,20 +554,23 @@ class SubsamplingState constructor(logger: Logger, private val zoomableState: Zo
     }
 
     private fun cleanTileDecoder(caller: String) {
-        val lastResetTileDecoderJob = this@SubsamplingState.lastResetTileDecoderJob
-        if (lastResetTileDecoderJob != null) {
-            lastResetTileDecoderJob.cancel("cleanTileDecoder:$caller")
-            this@SubsamplingState.lastResetTileDecoderJob = null
+        val resetTileDecoderJob1 = this@SubsamplingState.resetTileDecoderJob
+        if (resetTileDecoderJob1?.isActive == true) {
+            resetTileDecoderJob1.cancel("cleanTileDecoder:$caller")
+            this@SubsamplingState.resetTileDecoderJob = null
         }
         val tileDecoder = this@SubsamplingState.tileDecoder
         if (tileDecoder != null) {
-            tileDecoder.destroy("cleanTileDecoder:$caller")
+            logger.d { "SubsamplingState. cleanTileDecoder:$caller. '${subsamplingImage?.key}'" }
+            @Suppress("OPT_IN_USAGE")
+            GlobalScope.launch(ioCoroutineDispatcher()) {
+                tileDecoder.close()
+            }
             this@SubsamplingState.tileDecoder = null
-            logger.d { "cleanTileDecoder:$caller. '${imageKey}'" }
             refreshReadyState("cleanTileDecoder:$caller")
         }
         imageInfo = null
-        exifOrientation = null
+        zoomableState.contentOriginSize = IntSizeCompat.Zero.toPlatform()
     }
 
     private fun cleanTileManager(caller: String) {
@@ -598,13 +583,13 @@ class SubsamplingState constructor(logger: Logger, private val zoomableState: Zo
             backgroundTiles = emptyList()
             sampleSize = 0
             imageLoadRect = IntRect.Zero
-            logger.d { "cleanTileManager:$caller. '${imageKey}'" }
+            logger.d { "SubsamplingState. cleanTileManager:$caller. '${subsamplingImage?.key}'" }
             refreshReadyState("cleanTileManager:$caller")
         }
     }
 
     private fun clean(@Suppress("SameParameterValue") caller: String) {
-        cleanTileManager("destroy:$caller")
-        cleanTileDecoder("destroy:$caller")
+        cleanTileManager("clean:$caller")
+        cleanTileDecoder("clean:$caller")
     }
 }

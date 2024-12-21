@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ package com.github.panpf.zoomimage.subsampling
 /**
  * Tile animation configuration
  *
- * @see [com.github.panpf.zoomimage.core.test.subsampling.TileAnimationSpecTest]
+ * @see com.github.panpf.zoomimage.core.common.test.subsampling.TileAnimationSpecTest
  */
 data class TileAnimationSpec(
     /**

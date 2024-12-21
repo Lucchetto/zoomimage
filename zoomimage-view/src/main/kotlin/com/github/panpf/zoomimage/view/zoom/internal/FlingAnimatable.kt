@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,9 +19,13 @@ package com.github.panpf.zoomimage.view.zoom.internal
 import android.graphics.Rect
 import android.view.View
 import android.widget.OverScroller
-import androidx.core.view.ViewCompat
 import com.github.panpf.zoomimage.util.IntOffsetCompat
 
+/**
+ * A simple fling animation class that can animate a value from a start value to an end value.
+ *
+ * @see com.github.panpf.zoomimage.view.test.zoom.internal.FlingAnimatableTest
+ */
 internal class FlingAnimatable(
     private val view: View,
     private val start: IntOffsetCompat,
@@ -34,11 +38,12 @@ internal class FlingAnimatable(
     private val scroller: OverScroller = OverScroller(view.context)
     private val runnable = Runnable { frame() }
 
-    val running: Boolean
-        get() = !scroller.isFinished
+    var running = false
+        private set
 
     fun start() {
         if (running) return
+        running = true
         scroller.fling(
             /* startX = */ start.x,
             /* startY = */ start.y,
@@ -51,21 +56,25 @@ internal class FlingAnimatable(
             /* overX = */ 0,
             /* overY = */ 0
         )
-        view.post(runnable)
+        view.postOnAnimation(runnable)
     }
 
     fun stop() {
         if (!running) return
+        running = false
         view.removeCallbacks(runnable)
         scroller.forceFinished(true)
         onEnd()
     }
 
     private fun frame() {
+        if (!running) return
         if (scroller.computeScrollOffset()) {
-            onUpdateValue(IntOffsetCompat(scroller.currX, scroller.currY))
-            ViewCompat.postOnAnimation(view, runnable)
+            val current = IntOffsetCompat(scroller.currX, scroller.currY)
+            onUpdateValue(current)
+            view.postOnAnimation(runnable)
         } else {
+            running = false
             onEnd()
         }
     }

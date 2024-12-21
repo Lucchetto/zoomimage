@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,8 +29,8 @@ import androidx.compose.ui.node.DelegatingNode
 import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.node.currentValueOf
 import androidx.compose.ui.platform.LocalDensity
-import com.github.panpf.zoomimage.compose.internal.format
-import com.github.panpf.zoomimage.compose.internal.toShortString
+import com.github.panpf.zoomimage.compose.util.format
+import com.github.panpf.zoomimage.compose.util.toShortString
 import com.github.panpf.zoomimage.compose.zoom.internal.detectPowerfulTapGestures
 import com.github.panpf.zoomimage.compose.zoom.internal.detectPowerfulTransformGestures
 import com.github.panpf.zoomimage.zoom.ContinuousTransformType
@@ -49,10 +49,16 @@ import kotlinx.coroutines.launch
  */
 fun Modifier.zoom(
     zoomable: ZoomableState,
+    userSetupContentSize: Boolean = false,
     onLongPress: ((Offset) -> Unit)? = null,
     onTap: ((Offset) -> Unit)? = null,
 ): Modifier = this
-    .zoomable(zoomable, onLongPress = onLongPress, onTap = onTap)
+    .zoomable(
+        zoomable = zoomable,
+        userSetupContentSize = userSetupContentSize,
+        onLongPress = onLongPress,
+        onTap = onTap
+    )
     .zooming(zoomable)
 
 /**
@@ -70,10 +76,16 @@ fun Modifier.zoom(
  */
 fun Modifier.zoomable(
     zoomable: ZoomableState,
+    userSetupContentSize: Boolean = false,
     onLongPress: ((Offset) -> Unit)? = null,
     onTap: ((Offset) -> Unit)? = null,
 ): Modifier = this
-    .onSizeChanged { zoomable.containerSize = it }
+    .onSizeChanged {
+        zoomable.containerSize = it
+        if (!userSetupContentSize) {
+            zoomable.contentSize = it
+        }
+    }
     .then(ZoomableElement(zoomable, onLongPress, onTap))
 
 /**
@@ -85,7 +97,7 @@ fun Modifier.zooming(
     .clipToBounds()
     .graphicsLayer {
         val transform = zoomable.transform
-        zoomable.logger.v { "graphicsLayer. transform=$transform" }
+        zoomable.logger.v { "ZoomableState. graphicsLayer. transform=$transform" }
         scaleX = transform.scaleX
         scaleY = transform.scaleY
         translationX = transform.offsetX
@@ -174,7 +186,7 @@ internal class ZoomableNode(
         detectPowerfulTransformGestures(
             panZoomLock = true,
             canDrag = { horizontal: Boolean, direction: Int ->
-                val supportDrag = zoomable.checkSupportGestureType(GestureType.DRAG)
+                val supportDrag = zoomable.checkSupportGestureType(GestureType.ONE_FINGER_DRAG)
                 val canScroll = zoomable.canScroll(horizontal, direction)
                 val supportOneFingerScale =
                     zoomable.checkSupportGestureType(GestureType.ONE_FINGER_SCALE)
@@ -189,9 +201,9 @@ internal class ZoomableNode(
                         zoomable.checkSupportGestureType(GestureType.ONE_FINGER_SCALE)
                     val supportTwoFingerScale =
                         zoomable.checkSupportGestureType(GestureType.TWO_FINGER_SCALE)
-                    val supportDrag = zoomable.checkSupportGestureType(GestureType.DRAG)
+                    val supportDrag = zoomable.checkSupportGestureType(GestureType.ONE_FINGER_DRAG)
                     zoomable.logger.v {
-                        "zoomable. onGesture. " +
+                        "ZoomableState. zoomable. onGesture. " +
                                 "longPressExecuted=$longPressExecuted, " +
                                 "pointCount=$pointCount, " +
                                 "doubleTapPressPoint=$doubleTapPressPoint, " +
@@ -214,7 +226,8 @@ internal class ZoomableNode(
                     } else {
                         oneFingerScaleExecuted = false
                         if (supportTwoFingerScale || supportDrag) {
-                            val finalPan = if (supportDrag) pan else Offset.Zero
+                            // Only allow one-finger dragging
+                            val finalPan = if (supportDrag && pointCount == 1) pan else Offset.Zero
                             val finalZoom = if (supportTwoFingerScale) zoom else 1f
                             zoomable.continuousTransformType = ContinuousTransformType.GESTURE
                             zoomable.gestureTransform(
@@ -237,9 +250,9 @@ internal class ZoomableNode(
                     val supportTwoFingerScale =
                         zoomable.checkSupportGestureType(GestureType.TWO_FINGER_SCALE)
                     val supportDrag =
-                        zoomable.checkSupportGestureType(GestureType.DRAG)
+                        zoomable.checkSupportGestureType(GestureType.ONE_FINGER_DRAG)
                     zoomable.logger.v {
-                        "zoomable. onEnd. " +
+                        "ZoomableState. zoomable. onEnd. " +
                                 "centroid=${centroid.toShortString()}, " +
                                 "velocity=${velocity.x.format(2)}x${velocity.y.format(2)}, " +
                                 "longPressExecuted=$longPressExecuted, " +
@@ -252,7 +265,7 @@ internal class ZoomableNode(
                     if (longPressExecuted) return@launch
                     if (supportOneFingerScale && oneFingerScaleExecuted && doubleTapPressPoint != null) {
                         if (!zoomable.rollbackScale(doubleTapPressPoint)) {
-                            zoomable.continuousTransformType = GestureType.NONE
+                            zoomable.continuousTransformType = 0
                         }
                     } else {
                         val rollbackScaleExecuted =
@@ -263,7 +276,7 @@ internal class ZoomableNode(
                             flingExecuted = supportDrag && zoomable.fling(velocity, density)
                         }
                         if ((supportTwoFingerScale || supportDrag) && (!rollbackScaleExecuted && !flingExecuted)) {
-                            zoomable.continuousTransformType = GestureType.NONE
+                            zoomable.continuousTransformType = 0
                         }
                     }
                 }

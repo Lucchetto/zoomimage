@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,11 @@
 
 package com.github.panpf.zoomimage.util
 
-import com.github.panpf.zoomimage.util.internal.format
-import com.github.panpf.zoomimage.util.internal.lerp
 import com.github.panpf.zoomimage.util.internal.packFloats
-import com.github.panpf.zoomimage.util.internal.toStringAsFixed
 import com.github.panpf.zoomimage.util.internal.unpackFloat1
 import com.github.panpf.zoomimage.util.internal.unpackFloat2
+import kotlin.jvm.JvmInline
+import kotlin.math.abs
 import kotlin.math.sqrt
 
 /**
@@ -57,7 +56,7 @@ fun OffsetCompat(x: Float, y: Float) = OffsetCompat(packFloats(x, y))
  * Creates an offset. The first argument sets [x], the horizontal component,
  * and the second sets [y], the vertical component.
  *
- * @see [com.github.panpf.zoomimage.core.test.util.OffsetCompatTest]
+ * Copy from androidx/compose/ui/geometry/Offset.kt
  */
 @JvmInline
 value class OffsetCompat internal constructor(internal val packedValue: Long) {
@@ -250,7 +249,16 @@ inline fun OffsetCompat.takeOrElse(block: () -> OffsetCompat): OffsetCompat =
 /* ************************************ Extra-extended functions ******************************** */
 
 /**
+ * If true is returned, it means Offset is empty
+ *
+ * @see com.github.panpf.zoomimage.core.common.test.util.OffsetCompatTest.testIsEmpty
+ */
+fun OffsetCompat.isEmpty() = abs(x).format(2) == 0f && abs(y).format(2) == 0f
+
+/**
  * Return short string descriptions, for example: '10.01x9.03'
+ *
+ * @see com.github.panpf.zoomimage.core.common.test.util.OffsetCompatTest.testToShortString
  */
 fun OffsetCompat.toShortString(): String =
     if (isSpecified) "${x.format(2)}x${y.format(2)}" else "Unspecified"
@@ -261,6 +269,8 @@ fun OffsetCompat.toShortString(): String =
  * Returns an offset whose coordinates are the coordinates of the
  * left-hand-side operand (an OffsetCompat) multiplied by the scalar
  * right-hand-side operand (a Float).
+ *
+ * @see com.github.panpf.zoomimage.core.common.test.util.OffsetCompatTest.testTimes
  */
 operator fun OffsetCompat.times(scaleFactor: ScaleFactorCompat): OffsetCompat =
     OffsetCompat(x = x * scaleFactor.scaleX, y = y * scaleFactor.scaleY)
@@ -271,12 +281,16 @@ operator fun OffsetCompat.times(scaleFactor: ScaleFactorCompat): OffsetCompat =
  * Returns an offset whose coordinates are the coordinates of the
  * left-hand-side operand (an OffsetCompat) divided by the scalar right-hand-side
  * operand (a Float).
+ *
+ * @see com.github.panpf.zoomimage.core.common.test.util.OffsetCompatTest.testDiv
  */
 operator fun OffsetCompat.div(scaleFactor: ScaleFactorCompat): OffsetCompat =
     OffsetCompat(x = x / scaleFactor.scaleX, y = y / scaleFactor.scaleY)
 
 /**
  * Rotate the space by [rotation] degrees, and then return the rotated coordinates
+ *
+ * @see com.github.panpf.zoomimage.core.common.test.util.OffsetCompatTest.testRotateInSpace
  */
 fun OffsetCompat.rotateInSpace(spaceSize: SizeCompat, rotation: Int): OffsetCompat {
     require(rotation % 90 == 0) { "rotation must be a multiple of 90, rotation: $rotation" }
@@ -290,6 +304,8 @@ fun OffsetCompat.rotateInSpace(spaceSize: SizeCompat, rotation: Int): OffsetComp
 
 /**
  * Reverse rotate the space by [rotation] degrees, and then returns the reverse rotated coordinates
+ *
+ * @see com.github.panpf.zoomimage.core.common.test.util.OffsetCompatTest.testReverseRotateInSpace
  */
 fun OffsetCompat.reverseRotateInSpace(spaceSize: SizeCompat, rotation: Int): OffsetCompat {
     val rotatedSpaceSize = spaceSize.rotate(rotation)
@@ -299,6 +315,8 @@ fun OffsetCompat.reverseRotateInSpace(spaceSize: SizeCompat, rotation: Int): Off
 
 /**
  * Limit the offset to the rectangular extent
+ *
+ * @see com.github.panpf.zoomimage.core.common.test.util.OffsetCompatTest.testLimitToRect
  */
 fun OffsetCompat.limitTo(rect: RectCompat): OffsetCompat {
     return if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
@@ -313,6 +331,8 @@ fun OffsetCompat.limitTo(rect: RectCompat): OffsetCompat {
 
 /**
  * Limit offset to 0 to the range of size
+ *
+ * @see com.github.panpf.zoomimage.core.common.test.util.OffsetCompatTest.testLimitToSize
  */
 fun OffsetCompat.limitTo(size: SizeCompat): OffsetCompat =
     limitTo(RectCompat(0f, 0f, size.width, size.height))

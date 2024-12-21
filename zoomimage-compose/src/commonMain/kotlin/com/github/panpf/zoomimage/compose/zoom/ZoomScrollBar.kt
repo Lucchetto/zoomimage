@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,9 +32,10 @@ import androidx.compose.ui.node.currentValueOf
 import androidx.compose.ui.node.invalidateDraw
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntRect
-import com.github.panpf.zoomimage.compose.internal.isEmpty
-import com.github.panpf.zoomimage.compose.internal.rotate
-import com.github.panpf.zoomimage.compose.internal.rotateInSpace
+import androidx.compose.ui.unit.dp
+import com.github.panpf.zoomimage.compose.util.isEmpty
+import com.github.panpf.zoomimage.compose.util.rotate
+import com.github.panpf.zoomimage.compose.util.rotateInSpace
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -115,6 +116,7 @@ internal class ZoomScrollBarNode(
         val scrollBarSize = with(density) { scrollBarSpec.size.toPx() }
         val marginPx = with(density) { scrollBarSpec.margin.toPx() }
         val cornerRadius = CornerRadius(scrollBarSize / 2f, scrollBarSize / 2f)
+        val minLength = with(density) { 10.dp.toPx() }
         val alpha = alphaAnimatable.value
         val rotatedContentVisibleRect = contentVisibleRect
             .rotateInSpace(contentSize, rotation.roundToInt())
@@ -131,7 +133,8 @@ internal class ZoomScrollBarNode(
                     y = drawSize.height - marginPx - scrollBarSize
                 ),
                 size = Size(
-                    width = rotatedContentVisibleRect.width * widthScale,
+                    width = (rotatedContentVisibleRect.width * widthScale)
+                        .coerceAtLeast(minLength),
                     height = scrollBarSize
                 ),
                 cornerRadius = cornerRadius,
@@ -149,7 +152,8 @@ internal class ZoomScrollBarNode(
                 ),
                 size = Size(
                     width = scrollBarSize,
-                    height = rotatedContentVisibleRect.height * heightScale
+                    height = (rotatedContentVisibleRect.height * heightScale)
+                        .coerceAtLeast(minLength)
                 ),
                 cornerRadius = cornerRadius,
                 style = Fill,

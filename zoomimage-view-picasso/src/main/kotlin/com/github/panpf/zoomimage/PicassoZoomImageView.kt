@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,16 +17,20 @@
 package com.github.panpf.zoomimage
 
 import android.content.Context
-import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.util.AttributeSet
-import com.github.panpf.zoomimage.picasso.PicassoTileBitmapCache
-import com.github.panpf.zoomimage.picasso.newPicassoImageSource
+import com.github.panpf.zoomimage.picasso.PicassoSubsamplingImageGenerator
+import com.github.panpf.zoomimage.picasso.PicassoTileImageCache
+import com.github.panpf.zoomimage.picasso.internal.EnginePicassoSubsamplingImageGenerator
+import com.github.panpf.zoomimage.subsampling.SubsamplingImage
+import com.github.panpf.zoomimage.subsampling.SubsamplingImageGenerateResult
+import com.github.panpf.zoomimage.util.Logger
 import com.squareup.picasso.Callback
 import com.squareup.picasso.Picasso
 import com.squareup.picasso.RequestCreator
-import com.squareup.picasso.checkMemoryCacheDisabled
-import com.squareup.picasso.internalMemoryPolicy
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import java.io.File
 
 /**
@@ -36,12 +40,14 @@ import java.io.File
  *
  * ```kotlin
  * val picassoZoomImageView = PicassoZoomImageView(context)
- * picassoZoomImageViewImage.loadImage("http://sample.com/sample.jpg") {
+ * picassoZoomImageViewImage.loadImage("https://sample.com/sample.jpeg") {
  *     placeholder(R.drawable.placeholder)
  * }
  * ```
  *
  * Note: PicassoZoomImageView provides a set of dedicated APIs to listen to load results and get URIs, so please do not use the official API directly to load images
+ *
+ * @see com.github.panpf.zoomimage.view.picasso.test.PicassoZoomImageViewTest
  */
 open class PicassoZoomImageView @JvmOverloads constructor(
     context: Context,
@@ -49,8 +55,20 @@ open class PicassoZoomImageView @JvmOverloads constructor(
     defStyle: Int = 0
 ) : ZoomImageView(context, attrs, defStyle) {
 
-    init {
-        _subsamplingEngine?.tileBitmapCacheState?.value = PicassoTileBitmapCache(Picasso.get())
+    private val defaultSubsamplingImageGenerators = listOf(
+        EnginePicassoSubsamplingImageGenerator()
+    )
+    private var subsamplingImageGenerators: List<PicassoSubsamplingImageGenerator> =
+        defaultSubsamplingImageGenerators
+
+    fun setSubsamplingImageGenerators(subsamplingImageGenerators: List<PicassoSubsamplingImageGenerator>?) {
+        this.subsamplingImageGenerators =
+            subsamplingImageGenerators.orEmpty() + defaultSubsamplingImageGenerators
+    }
+
+    fun setSubsamplingImageGenerators(vararg subsamplingImageGenerators: PicassoSubsamplingImageGenerator) {
+        this.subsamplingImageGenerators =
+            subsamplingImageGenerators.toList() + defaultSubsamplingImageGenerators
     }
 
     /**
@@ -75,7 +93,7 @@ open class PicassoZoomImageView @JvmOverloads constructor(
     ) {
         val creator = Picasso.get().load(file)
         config?.invoke(creator)
-        loadImage(Uri.fromFile(file), callback, creator)
+        loadImage(data = Uri.fromFile(file), callback, creator)
     }
 
     /**
@@ -94,7 +112,7 @@ open class PicassoZoomImageView @JvmOverloads constructor(
     ) {
         val creator = Picasso.get().load(resourceId)
         config?.invoke(creator)
-        loadImage(Uri.parse("android.resource://$resourceId"), callback, creator)
+        loadImage(data = resourceId, callback, creator)
     }
 
     /**
@@ -116,7 +134,7 @@ open class PicassoZoomImageView @JvmOverloads constructor(
     ) {
         val creator = Picasso.get().load(uri)
         config?.invoke(creator)
-        loadImage(uri, callback, creator)
+        loadImage(data = uri, callback, creator)
     }
 
     /**
@@ -140,31 +158,59 @@ open class PicassoZoomImageView @JvmOverloads constructor(
     ) {
         val creator = Picasso.get().load(path)
         config?.invoke(creator)
-        loadImage(path?.let { Uri.parse(it) }, callback, creator)
+        loadImage(data = path?.let { Uri.parse(it) }, callback, creator)
     }
 
-    private fun loadImage(uri: Uri?, callback: Callback?, creator: RequestCreator) {
+    private fun loadImage(
+        data: Any?,
+        callback: Callback?,
+        creator: RequestCreator
+    ) {
         creator.into(this, object : Callback {
             override fun onSuccess() {
-                _subsamplingEngine?.disabledTileBitmapCacheState?.value =
-                    checkMemoryCacheDisabled(creator.internalMemoryPolicy)
-                val imageSource = newPicassoImageSource(context, uri)
-                if (imageSource == null) {
-                    logger.w { "PicassoZoomImageView. Can't use Subsampling, unsupported uri: '$uri'" }
-                }
-                _subsamplingEngine?.setImageSource(imageSource)
+                resetImageSource(data = data)
                 callback?.onSuccess()
             }
 
             override fun onError(e: Exception?) {
-                _subsamplingEngine?.setImageSource(null)
+                resetImageSource(data = null)
                 callback?.onError(e)
             }
         })
     }
 
-    override fun onDrawableChanged(oldDrawable: Drawable?, newDrawable: Drawable?) {
-        super.onDrawableChanged(oldDrawable, newDrawable)
-        _subsamplingEngine?.disabledTileBitmapCacheState?.value = false
+    private fun resetImageSource(data: Any?) {
+        // In order to be consistent with other ZoomImageViews, TileImageCache is also configured here,
+        // although it can be set in the constructor
+        val subsamplingEngine = _subsamplingEngine ?: return
+        val tileImageCacheState = subsamplingEngine.tileImageCacheState
+        if (tileImageCacheState.value == null) {
+            tileImageCacheState.value = PicassoTileImageCache(Picasso.get())
+        }
+
+        // Because Picasso may call onSuccess before the ImageView is attached to the window, only GlobalScope can be used here.
+        @Suppress("OPT_IN_USAGE")
+        GlobalScope.launch(Dispatchers.Main) {
+            val drawable = drawable
+            if (data != null && drawable != null) {
+                val generateResult = subsamplingImageGenerators.firstNotNullOfOrNull {
+                    it.generateImage(context, Picasso.get(), data, drawable)
+                }
+                if (generateResult is SubsamplingImageGenerateResult.Error) {
+                    logger.d {
+                        "PicassoZoomImageView. ${generateResult.message}. data='$data'"
+                    }
+                }
+                if (generateResult is SubsamplingImageGenerateResult.Success) {
+                    setSubsamplingImage(generateResult.subsamplingImage)
+                } else {
+                    setSubsamplingImage(null as SubsamplingImage?)
+                }
+            } else {
+                setSubsamplingImage(null as SubsamplingImage?)
+            }
+        }
     }
+
+    override fun newLogger(): Logger = Logger(tag = "PicassoZoomImageView")
 }

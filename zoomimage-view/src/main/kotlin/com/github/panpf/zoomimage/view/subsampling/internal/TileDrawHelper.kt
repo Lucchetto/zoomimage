@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,16 +24,15 @@ import android.graphics.Paint.Style.STROKE
 import android.graphics.Rect
 import android.graphics.RectF
 import android.view.View
-import androidx.core.graphics.withSave
-import com.github.panpf.zoomimage.subsampling.AndroidTileBitmap
+import com.github.panpf.zoomimage.subsampling.BitmapTileImage
 import com.github.panpf.zoomimage.subsampling.ImageInfo
 import com.github.panpf.zoomimage.subsampling.TileSnapshot
 import com.github.panpf.zoomimage.subsampling.TileState
 import com.github.panpf.zoomimage.util.IntSizeCompat
 import com.github.panpf.zoomimage.util.Logger
 import com.github.panpf.zoomimage.util.isEmpty
-import com.github.panpf.zoomimage.view.internal.applyTransform
 import com.github.panpf.zoomimage.view.subsampling.SubsamplingEngine
+import com.github.panpf.zoomimage.view.util.applyTransform
 import com.github.panpf.zoomimage.view.zoom.ZoomableEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -91,38 +90,38 @@ class TileDrawHelper(
         var insideLoadCount = 0
         var outsideLoadCount = 0
         var realDrawCount = 0
-        canvas.withSave {
-            canvas.concat(cacheDisplayMatrix.applyTransform(transform, containerSize))
+        val checkpoint = canvas.save()
+        canvas.concat(cacheDisplayMatrix.applyTransform(transform, containerSize))
 
-            backgroundTiles.forEach { tileSnapshot ->
-                if (tileSnapshot.srcRect.overlaps(imageLoadRect)) {
-                    if (drawTile(canvas, imageInfo, contentSize, tileSnapshot)) {
-                        backgroundCount++
-                    }
-                }
-            }
-            foregroundTiles.forEach { tileSnapshot ->
-                if (tileSnapshot.srcRect.overlaps(imageLoadRect)) {
-                    insideLoadCount++
-                    if (drawTile(canvas, imageInfo, contentSize, tileSnapshot)) {
-                        realDrawCount++
-                    }
-                    if (subsamplingEngine.showTileBoundsState.value) {
-                        drawTileBounds(canvas, imageInfo, contentSize, tileSnapshot)
-                    }
-                } else {
-                    outsideLoadCount++
+        backgroundTiles.forEach { tileSnapshot ->
+            if (tileSnapshot.srcRect.overlaps(imageLoadRect)) {
+                if (drawTile(canvas, imageInfo, contentSize, tileSnapshot)) {
+                    backgroundCount++
                 }
             }
         }
+        foregroundTiles.forEach { tileSnapshot ->
+            if (tileSnapshot.srcRect.overlaps(imageLoadRect)) {
+                insideLoadCount++
+                if (drawTile(canvas, imageInfo, contentSize, tileSnapshot)) {
+                    realDrawCount++
+                }
+                if (subsamplingEngine.showTileBoundsState.value) {
+                    drawTileBounds(canvas, imageInfo, contentSize, tileSnapshot)
+                }
+            } else {
+                outsideLoadCount++
+            }
+        }
+        canvas.restoreToCount(checkpoint)
 
         logger.d {
-            "drawTiles. tiles=${foregroundTiles.size}, " +
+            "TileDrawHelper. drawTiles. tiles=${foregroundTiles.size}, " +
                     "insideLoadCount=${insideLoadCount}, " +
                     "outsideLoadCount=${outsideLoadCount}, " +
                     "realDrawCount=${realDrawCount}, " +
                     "backgroundCount=${backgroundCount}. " +
-                    "'${subsamplingEngine.imageKey}'"
+                    "'${subsamplingEngine.subsamplingImage?.key}'"
         }
     }
 
@@ -132,9 +131,9 @@ class TileDrawHelper(
         contentSize: IntSizeCompat,
         tileSnapshot: TileSnapshot
     ): Boolean {
-        val tileBitmap = tileSnapshot.tileBitmap?.takeIf { !it.isRecycled } ?: return false
+        val tileImage = tileSnapshot.tileImage?.takeIf { !it.isRecycled } ?: return false
         val bitmap =
-            (tileBitmap as AndroidTileBitmap).bitmap?.takeIf { !it.isRecycled } ?: return false
+            (tileImage as BitmapTileImage).bitmap.takeIf { !it.isRecycled } ?: return false
 
         val tileDrawSrcRect = cacheRect2.apply {
             set(0, 0, bitmap.width, bitmap.height)
@@ -180,7 +179,7 @@ class TileDrawHelper(
         }
 
         val tileBoundsPaint = boundsPaint
-        val bitmapNoRecycled = tileSnapshot.tileBitmap?.isRecycled == false
+        val bitmapNoRecycled = tileSnapshot.tileImage?.isRecycled == false
         val boundsColor = when {
             bitmapNoRecycled && tileSnapshot.state == TileState.STATE_LOADED -> Color.GREEN
             tileSnapshot.state == TileState.STATE_LOADING -> Color.YELLOW

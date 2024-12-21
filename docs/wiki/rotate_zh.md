@@ -2,6 +2,7 @@
 
 翻译：[English](rotate.md)
 
+> [!TIP]
 > * 以下示例优先用 Compose 版本的组件来演示
 > * [ZoomState].zoomable 等价于 [ZoomImageView].zoomable
 > * [ZoomState].subsampling 等价于 [ZoomImageView].subsampling
@@ -15,21 +16,21 @@ ZoomImage 提供了 `rotate()` 方法用来旋转图像到指定角度，它有�
 示例：
 
 ```kotlin
-val state: ZoomState by rememberZoomState()
+val zoomState: ZoomState by rememberZoomState()
 
 SketchZoomAsyncImage(
-    imageUri = "http://sample.com/sample.jpg",
+    imageUri = "https://sample.com/sample.jpeg",
     contentDescription = "view image",
     modifier = Modifier.fillMaxSize(),
-    state = state,
+    zoomState = zoomState,
 )
 
 val coroutineScope = rememberCoroutineScope()
 Button(
     onClick = {
         coroutineScope.launch {
-            val targetRotation = state.zoomable.transform.rotation.roundToInt() + 90
-            state.zoomable.rotate(targetRotation = targetRotation)
+            val targetRotation = zoomState.zoomable.transform.rotation.roundToInt() + 90
+            zoomState.zoomable.rotate(targetRotation = targetRotation)
         }
     }
 ) {
@@ -39,8 +40,8 @@ Button(
 Button(
     onClick = {
         coroutineScope.launch {
-            val targetRotation = state.zoomable.transform.rotation.roundToInt() - 90
-            state.zoomable.rotate(targetRotation = targetRotation)
+            val targetRotation = zoomState.zoomable.transform.rotation.roundToInt() - 90
+            zoomState.zoomable.rotate(targetRotation = targetRotation)
         }
     }
 ) {
@@ -52,9 +53,9 @@ Button(
 
 ```kotlin
 // compose
-val state: ZoomState by rememberZoomState()
-SketchZoomAsyncImage(state = state)
-val zoomable: ZoomableState = state.zoomable
+val zoomState: ZoomState by rememberZoomState()
+SketchZoomAsyncImage(zoomState = zoomState)
+val zoomable: ZoomableState = zoomState.zoomable
 
 // view
 val sketchZoomImageView = SketchZoomImageView(context)
@@ -72,7 +73,7 @@ val zoomable: ZoomableEngine = sketchZoomImageView.zoomable
 * compose 版本的相关属性是用 State 包装的，在 Composable 函数中直接读取它即可实现监听
 * view 的相关属性是用 StateFlow 包装，调用其 collect 函数即可实现监听
 
-[ZoomImageView]: ../../zoomimage-view/src/main/java/com/github/panpf/zoomimage/ZoomImageView.kt
+[ZoomImageView]: ../../zoomimage-view/src/main/kotlin/com/github/panpf/zoomimage/ZoomImageView.kt
 
 [ZoomImage]: ../../zoomimage-compose/src/commonMain/kotlin/com/github/panpf/zoomimage/ZoomImage.kt
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,19 +21,26 @@ import android.view.animation.Interpolator
 
 /**
  * Animation-related configurations
+ *
+ * @see com.github.panpf.zoomimage.view.test.zoom.ZoomAnimationSpecTest
  */
 data class ZoomAnimationSpec(
-    var durationMillis: Int = 300,
-    var interpolator: Interpolator = AccelerateDecelerateInterpolator()
+    var durationMillis: Int = DEFAULT_DURATION_MILLIS,
+    var interpolator: Interpolator = DEFAULT_INTERPOLATOR
 ) {
     companion object {
+        val DEFAULT_DURATION_MILLIS = 300
+
+        val DEFAULT_INTERPOLATOR = AccelerateDecelerateInterpolator()
+
         val Default = ZoomAnimationSpec(
-            durationMillis = 300,
-            interpolator = AccelerateDecelerateInterpolator(),
+            durationMillis = DEFAULT_DURATION_MILLIS,
+            interpolator = DEFAULT_INTERPOLATOR,
         )
+
         val None = ZoomAnimationSpec(
             durationMillis = 0,
-            interpolator = AccelerateDecelerateInterpolator(),
+            interpolator = DEFAULT_INTERPOLATOR,
         )
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,10 +19,12 @@ package com.github.panpf.zoomimage
 import android.content.Context
 import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -30,6 +32,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.DefaultAlpha
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.IntSize
 import com.bumptech.glide.Glide
 import com.bumptech.glide.RequestBuilder
@@ -37,21 +40,22 @@ import com.bumptech.glide.load.DataSource
 import com.bumptech.glide.load.engine.GlideException
 import com.bumptech.glide.request.RequestListener
 import com.bumptech.glide.request.target.Target
-import com.github.panpf.zoomimage.compose.ZoomState
-import com.github.panpf.zoomimage.compose.glide.internal.ExperimentalGlideComposeApi
-import com.github.panpf.zoomimage.compose.glide.internal.GlideImage
-import com.github.panpf.zoomimage.compose.glide.internal.Placeholder
-import com.github.panpf.zoomimage.compose.glide.internal.RequestBuilderTransform
-import com.github.panpf.zoomimage.compose.glide.internal.Transition
-import com.github.panpf.zoomimage.compose.rememberZoomState
+import com.github.panpf.zoomimage.compose.glide.ExperimentalGlideComposeApi
+import com.github.panpf.zoomimage.compose.glide.GlideImage
+import com.github.panpf.zoomimage.compose.glide.Placeholder
+import com.github.panpf.zoomimage.compose.glide.RequestBuilderTransform
+import com.github.panpf.zoomimage.compose.glide.Transition
 import com.github.panpf.zoomimage.compose.subsampling.subsampling
+import com.github.panpf.zoomimage.compose.util.rtlFlipped
 import com.github.panpf.zoomimage.compose.zoom.ScrollBarSpec
+import com.github.panpf.zoomimage.compose.zoom.mouseZoom
 import com.github.panpf.zoomimage.compose.zoom.zoom
 import com.github.panpf.zoomimage.compose.zoom.zoomScrollBar
-import com.github.panpf.zoomimage.glide.GlideTileBitmapCache
-import com.github.panpf.zoomimage.glide.GlideTileBitmapPool
-import com.github.panpf.zoomimage.glide.newGlideImageSource
-
+import com.github.panpf.zoomimage.glide.GlideTileImageCache
+import com.github.panpf.zoomimage.subsampling.SubsamplingImage
+import com.github.panpf.zoomimage.subsampling.SubsamplingImageGenerateResult
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 /**
  * An image component that integrates the Glide image loading framework that zoom and subsampling huge images
@@ -60,7 +64,7 @@ import com.github.panpf.zoomimage.glide.newGlideImageSource
  *
  * ```kotlin
  * GlideZoomAsyncImage(
- *     model = "http://sample.com/sample.jpg",
+ *     model = "https://sample.com/sample.jpeg",
  *     contentDescription = "view image",
  *     modifier = Modifier.fillMaxSize(),
  * ) {
@@ -115,10 +119,11 @@ import com.github.panpf.zoomimage.glide.newGlideImageSource
  * opposed to resource id or [Drawable]), this [Placeholder] will not be used unless the `error`
  * [RequestBuilder] also fails. This parameter does not override error [RequestBuilder]s, only error
  * resource ids and/or [Drawable]s.
- * @param state The state to control zoom
+ * @param zoomState The state to control zoom
  * @param scrollBar Controls whether scroll bars are displayed and their style
  * @param onLongPress Called when the user long presses the image
  * @param onTap Called when the user taps the image
+ * @see com.github.panpf.zoomimage.compose.glide.test.GlideZoomAsyncImageTest.testGlideZoomAsyncImage
  */
 @OptIn(ExperimentalGlideComposeApi::class)
 @Composable
@@ -130,7 +135,7 @@ fun GlideZoomAsyncImage(
     contentScale: ContentScale = ContentScale.Fit,
     alpha: Float = DefaultAlpha,
     colorFilter: ColorFilter? = null,
-    state: ZoomState = rememberZoomState(),
+    zoomState: GlideZoomState = rememberGlideZoomState(),
     scrollBar: ScrollBarSpec? = ScrollBarSpec.Default,
     onLongPress: ((Offset) -> Unit)? = null,
     onTap: ((Offset) -> Unit)? = null,
@@ -142,53 +147,82 @@ fun GlideZoomAsyncImage(
     // TODO(judds): Consider defaulting to load the model here instead of always doing so below.
     requestBuilderTransform: RequestBuilderTransform<Drawable> = { it },
 ) {
-    state.zoomable.contentScale = contentScale
-    state.zoomable.alignment = alignment
+    zoomState.zoomable.contentScale = contentScale
+    zoomState.zoomable.alignment = alignment
 
     val context = LocalContext.current
-    LaunchedEffect(Unit) {
-        val glide = Glide.get(context)
-        state.subsampling.tileBitmapPool = GlideTileBitmapPool(glide)
-        state.subsampling.tileBitmapCache = GlideTileBitmapCache(glide)
+    val glide = Glide.get(context)
+    LaunchedEffect(zoomState.subsampling) {
+        zoomState.subsampling.tileImageCache = GlideTileImageCache(glide)
     }
 
-    GlideImage(
-        model = model,
-        contentDescription = contentDescription,
-        alignment = Alignment.TopStart,
-        contentScale = ContentScale.None,
-        alpha = alpha,
-        colorFilter = colorFilter,
-        clipToBounds = false,
-        loading = loading,
-        failure = failure,
-        transition = transition,
-        requestBuilderTransform = { requestBuilder ->
-            requestBuilderTransform(requestBuilder)
-                .centerInside()
-                .addListener(ResetListener(context, state, requestBuilder, model))
-        },
-        modifier = modifier
-            .let { if (scrollBar != null) it.zoomScrollBar(state.zoomable, scrollBar) else it }
-            .zoom(state.zoomable, onLongPress = onLongPress, onTap = onTap)
-            .subsampling(state.zoomable, state.subsampling),
-    )
+    // moseZoom directly acts on ZoomAsyncImage, causing the zoom center to be abnormal.
+    Box(modifier = modifier.mouseZoom(zoomState.zoomable)) {
+        val coroutineScope = rememberCoroutineScope()
+        val layoutDirection = LocalLayoutDirection.current
+        GlideImage(
+            model = model,
+            contentDescription = contentDescription,
+            alignment = Alignment.TopStart.rtlFlipped(layoutDirection),
+            contentScale = ContentScale.None,
+            alpha = alpha,
+            colorFilter = colorFilter,
+            clipToBounds = false,
+            loading = loading,
+            failure = failure,
+            transition = transition,
+            requestBuilderTransform = { requestBuilder ->
+                requestBuilderTransform(requestBuilder)
+                    .centerInside()
+                    .addListener(
+                        ResetListener(
+                            context = context,
+                            coroutineScope = coroutineScope,
+                            glide = glide,
+                            zoomState = zoomState,
+                            model = model
+                        )
+                    )
+            },
+            modifier = Modifier
+                .matchParentSize()
+                .zoom(
+                    zoomable = zoomState.zoomable,
+                    userSetupContentSize = true,
+                    onLongPress = onLongPress,
+                    onTap = onTap
+                )
+                .subsampling(zoomState.zoomable, zoomState.subsampling),
+        )
+
+        if (scrollBar != null) {
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .zoomScrollBar(zoomState.zoomable, scrollBar)
+            )
+        }
+    }
 }
 
 private class ResetListener(
     private val context: Context,
-    private val state: ZoomState,
-    private val requestBuilder: RequestBuilder<Drawable>,
+    private val coroutineScope: CoroutineScope,
+    private val glide: Glide,
+    private val zoomState: GlideZoomState,
     private val model: Any?,
 ) : RequestListener<Drawable> {
+
+    private val logger = zoomState.zoomable.logger
+
     override fun onLoadFailed(
         e: GlideException?,
         model: Any?,
         target: Target<Drawable>,
         isFirstResource: Boolean
     ): Boolean {
-        state.zoomable.logger.d { "GlideZoomAsyncImage. onLoadFailed. model='$model'" }
-        reset(resource = null)
+        logger.d { "GlideZoomAsyncImage. onLoadFailed. model='$model'" }
+        reset(ready = false, resource = null)
         return false
     }
 
@@ -199,28 +233,34 @@ private class ResetListener(
         dataSource: DataSource,
         isFirstResource: Boolean
     ): Boolean {
-        state.zoomable.logger.d { "GlideZoomAsyncImage. onResourceReady. model='$model', resource=$resource" }
-        reset(resource = resource)
+        logger.d { "GlideZoomAsyncImage. onResourceReady. resource=$resource. model='$model'" }
+        reset(ready = true, resource = resource)
         return false
     }
 
-    private fun reset(resource: Drawable?) {
+    private fun reset(ready: Boolean, resource: Drawable?) {
         val drawableSize = resource
             ?.let { IntSize(it.intrinsicWidth, it.intrinsicHeight) }
             ?.takeIf { it.isNotEmpty() }
-        state.zoomable.contentSize = drawableSize ?: IntSize.Zero
+        zoomState.zoomable.contentSize = drawableSize ?: IntSize.Zero
 
-        val imageSource = if (resource != null) {
-            state.subsampling.disabledTileBitmapCache = !requestBuilder.isMemoryCacheable
-            newGlideImageSource(context, model).apply {
-                if (this == null) {
-                    state.subsampling.logger.w { "GlideZoomAsyncImage. Can't use Subsampling, unsupported model='$model'" }
+        if (ready && model != null && resource != null) {
+            coroutineScope.launch {
+                val generateResult = zoomState.subsamplingImageGenerators.firstNotNullOfOrNull {
+                    it.generateImage(context, glide, model, resource)
+                }
+                if (generateResult is SubsamplingImageGenerateResult.Error) {
+                    logger.d { "GlideZoomAsyncImage. ${generateResult.message}. model='$model'" }
+                }
+                if (generateResult is SubsamplingImageGenerateResult.Success) {
+                    zoomState.setSubsamplingImage(generateResult.subsamplingImage)
+                } else {
+                    zoomState.setSubsamplingImage(null as SubsamplingImage?)
                 }
             }
         } else {
-            null
+            zoomState.setSubsamplingImage(null as SubsamplingImage?)
         }
-        state.subsampling.setImageSource(imageSource)
     }
 }
 

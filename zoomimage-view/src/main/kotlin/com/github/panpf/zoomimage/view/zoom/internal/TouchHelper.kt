@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -99,7 +99,7 @@ internal class TouchHelper(view: View, zoomable: ZoomableEngine) {
                 true
             },
             canDrag = { horizontal: Boolean, direction: Int ->
-                val supportDrag = zoomable.checkSupportGestureType(GestureType.DRAG)
+                val supportDrag = zoomable.checkSupportGestureType(GestureType.ONE_FINGER_DRAG)
                 val canScroll = zoomable.canScroll(horizontal, direction)
                 val supportOneFingerScale =
                     zoomable.checkSupportGestureType(GestureType.ONE_FINGER_SCALE)
@@ -115,9 +115,9 @@ internal class TouchHelper(view: View, zoomable: ZoomableEngine) {
                         zoomable.checkSupportGestureType(GestureType.ONE_FINGER_SCALE)
                     val supportTwoFingerScale =
                         zoomable.checkSupportGestureType(GestureType.TWO_FINGER_SCALE)
-                    val supportDrag = zoomable.checkSupportGestureType(GestureType.DRAG)
+                    val supportDrag = zoomable.checkSupportGestureType(GestureType.ONE_FINGER_DRAG)
                     zoomable.logger.v {
-                        "zoomable. onGesture. " +
+                        "ZoomableEngine. onGesture. " +
                                 "longPressExecuted=$longPressExecuted, " +
                                 "pointCount=$pointCount, " +
                                 "doubleTapPressPoint=$doubleTapPressPoint, " +
@@ -165,9 +165,9 @@ internal class TouchHelper(view: View, zoomable: ZoomableEngine) {
                     val supportTwoFingerScale =
                         zoomable.checkSupportGestureType(GestureType.TWO_FINGER_SCALE)
                     val supportDrag =
-                        zoomable.checkSupportGestureType(GestureType.DRAG)
+                        zoomable.checkSupportGestureType(GestureType.ONE_FINGER_DRAG)
                     zoomable.logger.v {
-                        "zoomable. onEnd. " +
+                        "ZoomableEngine. onEnd. " +
                                 "focus=${focus.toShortString()}, " +
                                 "velocity=${velocity.toShortString()}, " +
                                 "longPressExecuted=$longPressExecuted, " +
@@ -180,7 +180,7 @@ internal class TouchHelper(view: View, zoomable: ZoomableEngine) {
                     if (longPressExecuted) return@launch
                     if (supportOneFingerScale && oneFingerScaleExecuted && doubleTapPressPoint != null) {
                         if (!zoomable.rollbackScale(doubleTapPressPoint)) {
-                            zoomable._continuousTransformTypeState.value = GestureType.NONE
+                            zoomable._continuousTransformTypeState.value = 0
                         }
                     } else {
                         val rollbackScaleExecuted =
@@ -190,7 +190,7 @@ internal class TouchHelper(view: View, zoomable: ZoomableEngine) {
                             flingExecuted = supportDrag && zoomable.fling(velocity)
                         }
                         if ((supportTwoFingerScale || supportDrag) && (!rollbackScaleExecuted && !flingExecuted)) {
-                            zoomable._continuousTransformTypeState.value = GestureType.NONE
+                            zoomable._continuousTransformTypeState.value = 0
                         }
                     }
                 }

@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <com.github.panpf.sketch.SketchImageView
+        android:id="@+id/bgImage"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="background"
+        android:scaleType="centerCrop" />
+
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/pager"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <FrameLayout
+        android:id="@+id/topBarInsetsLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <LinearLayout
+            android:id="@+id/toolsLayout"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/photo_pager_top_bar_height"
+            android:orientation="horizontal"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp">
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/backImage"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_gravity="center_vertical"
+                android:background="@drawable/bg_circle_tertiary"
+                android:padding="8dp"
+                app:srcCompat="@drawable/ic_arrow_back"
+                app:tint="@android:color/white" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="10dp"
+                android:layout_weight="1" />
+
+            <FrameLayout
+                android:id="@+id/imageLoaderLayout"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_gravity="center_vertical"
+                android:layout_marginEnd="10dp"
+                android:background="@drawable/bg_circle_tertiary">
+
+                <com.google.android.material.imageview.ShapeableImageView
+                    android:id="@+id/imageLoaderImage"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_gravity="center"
+                    android:background="@drawable/bg_circle_tertiary"
+                    android:scaleType="centerCrop"
+                    app:shapeAppearance="@style/ShapeAppearance.Material3.Corner.Full"
+                    app:srcCompat="@drawable/logo_sketch" />
+            </FrameLayout>
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/orientationImage"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_gravity="center_vertical"
+                android:layout_marginEnd="10dp"
+                android:background="@drawable/bg_circle_tertiary"
+                android:padding="8dp"
+                app:srcCompat="@drawable/ic_swap_ver"
+                app:tint="@android:color/white" />
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/settingsImage"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_gravity="center_vertical"
+                android:layout_marginEnd="10dp"
+                android:background="@drawable/bg_circle_tertiary"
+                android:padding="8dp"
+                app:srcCompat="@drawable/ic_settings"
+                app:tint="@android:color/white" />
+
+            <TextView
+                android:id="@+id/pageNumberText"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_gravity="center_vertical"
+                android:background="@drawable/bg_circle_tertiary"
+                android:gravity="center"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:textColor="@android:color/white"
+                android:textSize="12sp"
+                tools:ignore="RtlHardcoded"
+                tools:text="@string/pager_number" />
+        </LinearLayout>
+    </FrameLayout>
+</FrameLayout>

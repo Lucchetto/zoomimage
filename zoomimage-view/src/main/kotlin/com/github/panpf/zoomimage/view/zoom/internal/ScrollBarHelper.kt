@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package com.github.panpf.zoomimage.view.zoom.internal
 
+import android.content.res.Resources
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
@@ -82,6 +83,7 @@ internal class ScrollBarHelper(
 
         val rotatedContentVisibleRect = contentVisibleRect.rotateInSpace(contentSize, rotation)
         val rotatedContentSize = contentSize.rotate(rotation)
+        val minLength = 10f * Resources.getSystem().displayMetrics.density
         if (rotatedContentVisibleRect.width < rotatedContentSize.width) {
             val widthScale =
                 (containerSize.width - scrollBarSpec.margin * 4) / rotatedContentSize.width
@@ -91,7 +93,8 @@ internal class ScrollBarHelper(
                 set(
                     /* left = */ left,
                     /* top = */ top,
-                    /* right = */ left + rotatedContentVisibleRect.width * widthScale,
+                    /* right = */
+                    left + (rotatedContentVisibleRect.width * widthScale).coerceAtLeast(minLength),
                     /* bottom = */ top + scrollBarSpec.size
                 )
             }
@@ -112,7 +115,8 @@ internal class ScrollBarHelper(
                     /* left = */ left,
                     /* top = */ top,
                     /* right = */ left + scrollBarSpec.size,
-                    /* bottom = */ top + rotatedContentVisibleRect.height * heightScale
+                    /* bottom = */
+                    top + (rotatedContentVisibleRect.height * heightScale).coerceAtLeast(minLength)
                 )
             }
             canvas.drawRoundRect(

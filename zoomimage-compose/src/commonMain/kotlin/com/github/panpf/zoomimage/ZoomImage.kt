@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,22 +22,30 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.paint
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.DefaultAlpha
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntSize
 import com.github.panpf.zoomimage.compose.ZoomState
-import com.github.panpf.zoomimage.compose.internal.MyImage
-import com.github.panpf.zoomimage.compose.internal.round
 import com.github.panpf.zoomimage.compose.rememberZoomState
 import com.github.panpf.zoomimage.compose.subsampling.subsampling
+import com.github.panpf.zoomimage.compose.util.round
+import com.github.panpf.zoomimage.compose.util.rtlFlipped
 import com.github.panpf.zoomimage.compose.zoom.ScrollBarSpec
+import com.github.panpf.zoomimage.compose.zoom.mouseZoom
 import com.github.panpf.zoomimage.compose.zoom.zoom
 import com.github.panpf.zoomimage.compose.zoom.zoomScrollBar
-import com.github.panpf.zoomimage.compose.zoom.zooming
 import kotlin.math.roundToInt
 
 /**
@@ -46,17 +54,18 @@ import kotlin.math.roundToInt
  * Example usages:
  *
  * ```kotlin
- * val state: ZoomState by rememberZoomState()
+ * val zoomState: ZoomState by rememberZoomState()
  * val context = LocalContext.current
- * LaunchedEffect(Unit) {
- *     val imageSource = ImageSource.fromResource(context, R.drawable.huge_image)
- *     state.subsampling.setImageSource(imageSource)
+ * LaunchedEffect(zoomState.subsampling) {
+ *     val resUri = Res.getUri("files/huge_world.jpeg")
+ *     val imageSource = ImageSource.fromComposeResource(resUri)
+ *     zoomState.setSubsamplingImage(imageSource)
  * }
  * ZoomImage(
- *     painter = painterResource(R.drawable.huge_image_thumbnail),
+ *     painter = painterResource(Res.drawable.huge_world_thumbnail),
  *     contentDescription = "view image",
  *     modifier = Modifier.fillMaxSize(),
- *     state = state,
+ *     zoomState = zoomState,
  * )
  * ```
  *
@@ -73,10 +82,11 @@ import kotlin.math.roundToInt
  * @param alpha Optional opacity to be applied to the [Painter] when it is rendered onscreen
  * the default renders the [Painter] completely opaque
  * @param colorFilter Optional colorFilter to apply for the [Painter] when it is rendered onscreen
- * @param state The state to control zoom
+ * @param zoomState The state to control zoom
  * @param scrollBar Controls whether scroll bars are displayed and their style
  * @param onLongPress Called when the user long presses the image
  * @param onTap Called when the user taps the image
+ * @see com.github.panpf.zoomimage.compose.common.test.ZoomImageTest
  */
 @Composable
 fun ZoomImage(
@@ -87,18 +97,19 @@ fun ZoomImage(
     contentScale: ContentScale = ContentScale.Fit,
     alpha: Float = DefaultAlpha,
     colorFilter: ColorFilter? = null,
-    state: ZoomState = rememberZoomState(),
+    zoomState: ZoomState = rememberZoomState(),
     scrollBar: ScrollBarSpec? = ScrollBarSpec.Default,
     onLongPress: ((Offset) -> Unit)? = null,
     onTap: ((Offset) -> Unit)? = null,
 ) {
-    state.zoomable.contentScale = contentScale
-    state.zoomable.alignment = alignment
-    state.zoomable.contentSize = remember(painter.intrinsicSize) {
+    zoomState.zoomable.contentScale = contentScale
+    zoomState.zoomable.alignment = alignment
+    zoomState.zoomable.contentSize = remember(painter.intrinsicSize) {
         painter.intrinsicSize.round()
     }
 
-    BoxWithConstraints(modifier = modifier) {
+    // moseZoom directly acts on ZoomAsyncImage, causing the zoom center to be abnormal.
+    BoxWithConstraints(modifier = modifier.mouseZoom(zoomState.zoomable)) {
         /*
          * Here use BoxWithConstraints and then actively set containerSize,
          * In order to prepare the transform in advance, so that when the position of the image needs to be adjusted,
@@ -110,39 +121,73 @@ fun ZoomImage(
             val height = with(density) { maxHeight.toPx() }.roundToInt()
             IntSize(width = width, height = height)
         }
-        state.zoomable.containerSize = newContainerSize
+        zoomState.zoomable.containerSize = newContainerSize
 
+        val layoutDirection = LocalLayoutDirection.current
         MyImage(
             painter = painter,
             contentDescription = contentDescription,
-            alignment = Alignment.TopStart,
+            alignment = Alignment.TopStart.rtlFlipped(layoutDirection),
             contentScale = ContentScale.None,
             alpha = alpha,
             colorFilter = colorFilter,
             clipToBounds = false,
             modifier = Modifier
                 .matchParentSize()
-                .zoom(state.zoomable, onLongPress = onLongPress, onTap = onTap),
-        )
-
-        // Why are subsampling tiles drawn on separate components?
-        // Because when drawing the bottom and right edge subsampling tiles on the desktop platform,
-        // a drawing failure will occur, resulting in the loss of all component content.
-        // Therefore, if the subsampling tile is drawn on a separate component, when a problem occurs, the user will only see that the problem area is unclear, rather than the entire component content being lost.
-        // issue: https://github.com/JetBrains/compose-multiplatform/issues/3904
-        Box(
-            Modifier
-                .matchParentSize()
-                .zooming(state.zoomable)
-                .subsampling(state.zoomable, state.subsampling)
+                .zoom(
+                    zoomable = zoomState.zoomable,
+                    userSetupContentSize = true,
+                    onLongPress = onLongPress,
+                    onTap = onTap
+                )
+                .subsampling(zoomState.zoomable, zoomState.subsampling),
         )
 
         if (scrollBar != null) {
             Box(
                 Modifier
                     .matchParentSize()
-                    .zoomScrollBar(state.zoomable, scrollBar)
+                    .zoomScrollBar(zoomState.zoomable, scrollBar)
             )
         }
+    }
+}
+
+@Composable
+private fun MyImage(
+    painter: Painter,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    alignment: Alignment = Alignment.Center,
+    contentScale: ContentScale = ContentScale.Fit,
+    alpha: Float = DefaultAlpha,
+    colorFilter: ColorFilter? = null,
+    clipToBounds: Boolean = true,
+) {
+    val semantics = if (contentDescription != null) {
+        Modifier.semantics {
+            this.contentDescription = contentDescription
+            this.role = Role.Image
+        }
+    } else {
+        Modifier
+    }
+
+    // Explicitly use a simple Layout implementation here as Spacer squashes any non fixed
+    // constraint with zero
+    Layout(
+        {},
+        modifier
+            .then(semantics)
+            .let { if (clipToBounds) it.clipToBounds() else it }
+            .paint(
+                painter,
+                alignment = alignment,
+                contentScale = contentScale,
+                alpha = alpha,
+                colorFilter = colorFilter
+            )
+    ) { _, constraints ->
+        layout(constraints.minWidth, constraints.minHeight) {}
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@
 
 package com.github.panpf.zoomimage.view.zoom
 
+import android.graphics.Rect
 import android.view.View
 import com.github.panpf.zoomimage.ZoomImageView
 import com.github.panpf.zoomimage.util.IntOffsetCompat
@@ -38,16 +39,14 @@ import com.github.panpf.zoomimage.util.toOffset
 import com.github.panpf.zoomimage.util.toRect
 import com.github.panpf.zoomimage.util.toShortString
 import com.github.panpf.zoomimage.util.toSize
-import com.github.panpf.zoomimage.view.internal.Rect
-import com.github.panpf.zoomimage.view.internal.convert
-import com.github.panpf.zoomimage.view.internal.format
-import com.github.panpf.zoomimage.view.internal.isAttachedToWindowCompat
-import com.github.panpf.zoomimage.view.internal.requiredMainThread
-import com.github.panpf.zoomimage.view.internal.toHexString
 import com.github.panpf.zoomimage.view.subsampling.SubsamplingEngine
+import com.github.panpf.zoomimage.view.util.format
+import com.github.panpf.zoomimage.view.util.requiredMainThread
+import com.github.panpf.zoomimage.view.util.rtlFlipped
 import com.github.panpf.zoomimage.view.zoom.internal.FlingAnimatable
 import com.github.panpf.zoomimage.view.zoom.internal.FloatAnimatable
 import com.github.panpf.zoomimage.zoom.AlignmentCompat
+import com.github.panpf.zoomimage.zoom.ContainerWhitespace
 import com.github.panpf.zoomimage.zoom.ContentScaleCompat
 import com.github.panpf.zoomimage.zoom.ContinuousTransformType
 import com.github.panpf.zoomimage.zoom.GestureType
@@ -71,6 +70,7 @@ import com.github.panpf.zoomimage.zoom.canScrollByEdge
 import com.github.panpf.zoomimage.zoom.checkParamsChanges
 import com.github.panpf.zoomimage.zoom.contentPointToContainerPoint
 import com.github.panpf.zoomimage.zoom.contentPointToTouchPoint
+import com.github.panpf.zoomimage.zoom.isEmpty
 import com.github.panpf.zoomimage.zoom.limitScaleWithRubberBand
 import com.github.panpf.zoomimage.zoom.name
 import com.github.panpf.zoomimage.zoom.touchPointToContentPoint
@@ -87,10 +87,10 @@ import kotlin.math.roundToInt
 
 /**
  * Engines that control scale, pan, rotation
+ *
+ * @see com.github.panpf.zoomimage.view.test.zoom.ZoomableEngineTest
  */
-class ZoomableEngine constructor(logger: Logger, val view: View) {
-
-    val logger: Logger = logger.newLogger(module = "ZoomableEngine@${logger.toHexString()}")
+class ZoomableEngine(val logger: Logger, val view: View) {
 
     private var coroutineScope: CoroutineScope? = null
     private var lastScaleAnimatable: FloatAnimatable? = null
@@ -108,7 +108,6 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
      * The size of the content, this is usually the size of the thumbnail Drawable, setup by the [ZoomImageView] component
      */
     val contentSizeState = MutableStateFlow(IntSizeCompat.Zero)
-        .convert { if (it.isNotEmpty()) it else containerSizeState.value }
 
     /**
      * The original size of the content, it is usually set by [SubsamplingEngine] after parsing the original size of the image
@@ -167,11 +166,21 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
     val limitOffsetWithinBaseVisibleRectState = MutableStateFlow(false)
 
     /**
+     * Add whitespace around containers based on container size
+     */
+    var containerWhitespaceMultipleState = MutableStateFlow(0f)
+
+    /**
+     * Add whitespace around containers, has higher priority than [containerWhitespaceMultipleState]
+     */
+    var containerWhitespaceState = MutableStateFlow(ContainerWhitespace.Zero)
+
+    /**
      * Disabled gesture types. Allow multiple types to be combined through the 'and' operator
      *
      * @see com.github.panpf.zoomimage.zoom.GestureType
      */
-    var disabledGestureTypeState = MutableStateFlow(0)
+    var disabledGestureTypesState = MutableStateFlow(0)
 
     private var lastContainerSize: IntSizeCompat = containerSizeState.value
     private var lastContentSize: IntSizeCompat = contentSizeState.value
@@ -181,6 +190,9 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
     private var lastRotation: Int = rotation
     private var lastReadMode: ReadMode? = readModeState.value
     private var lastScalesCalculator: ScalesCalculator = scalesCalculatorState.value
+    private var lastLimitOffsetWithinBaseVisibleRect: Boolean =
+        limitOffsetWithinBaseVisibleRectState.value
+    private var lastContainerWhitespace: ContainerWhitespace = calculateContainerWhitespace()
 
 
     /* *********************************** Information properties ******************************* */
@@ -191,7 +203,7 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
     private val _minScaleState = MutableStateFlow(1.0f)
     private val _mediumScaleState = MutableStateFlow(1.0f)
     private val _maxScaleState = MutableStateFlow(1.0f)
-    internal val _continuousTransformTypeState = MutableStateFlow(ContinuousTransformType.NONE)
+    internal val _continuousTransformTypeState = MutableStateFlow(0)
     private val _contentBaseDisplayRectState = MutableStateFlow(IntRectCompat.Zero)
     private val _contentBaseVisibleRectState = MutableStateFlow(IntRectCompat.Zero)
     private val _contentDisplayRectState = MutableStateFlow(IntRectCompat.Zero)
@@ -233,13 +245,6 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
     val maxScaleState: StateFlow<Float> = _maxScaleState
 
     /**
-     * The type of transformation currently in progress
-     *
-     * @see ContinuousTransformType
-     */
-    val continuousTransformTypeState: StateFlow<Int> = _continuousTransformTypeState
-
-    /**
      * The content region in the container after the baseTransform transformation
      */
     val contentBaseDisplayRectState: StateFlow<IntRectCompat> = _contentBaseDisplayRectState
@@ -260,14 +265,22 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
     val contentVisibleRectState: StateFlow<IntRectCompat> = _contentVisibleRectState
 
     /**
+     * The offset boundary of userTransform, affected by scale and limitOffsetWithinBaseVisibleRect
+     */
+    val userOffsetBoundsState: StateFlow<IntRectCompat> = _userOffsetBoundsState
+
+    /**
      * Edge state for the current offset
      */
     val scrollEdgeState: StateFlow<ScrollEdge> = _scrollEdgeState
 
     /**
-     * The offset boundary of userTransform, affected by scale and limitOffsetWithinBaseVisibleRect
+     * The type of transformation currently in progress
+     *
+     * @see ContinuousTransformType
      */
-    val userOffsetBoundsState: StateFlow<IntRectCompat> = _userOffsetBoundsState
+    val continuousTransformTypeState: StateFlow<Int> = _continuousTransformTypeState
+
 
     init {
         view.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
@@ -279,7 +292,7 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
                 onDetachFromWindow()
             }
         })
-        if (view.isAttachedToWindowCompat) {
+        if (view.isAttachedToWindow) {
             onAttachToWindow()
         }
     }
@@ -295,7 +308,7 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
     suspend fun reset(caller: String): Unit = coroutineScope {
         requiredMainThread()
         stopAllAnimation("reset:$caller")
-
+        view.layoutDirection
         val containerSize = containerSizeState.value
         val contentSize = contentSizeState.value
         val contentOriginSize = contentOriginSizeState.value
@@ -304,6 +317,8 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
         val contentScale = contentScaleState.value
         val alignment = alignmentState.value
         val scalesCalculator = scalesCalculatorState.value
+        val limitOffsetWithinBaseVisibleRect = limitOffsetWithinBaseVisibleRectState.value
+        val containerWhitespace = calculateContainerWhitespace()
         val lastContainerSize = lastContainerSize
         val lastContentSize = lastContentSize
         val lastContentOriginSize = lastContentOriginSize
@@ -312,6 +327,8 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
         val lastReadMode = lastReadMode
         val lastRotation = lastRotation
         val lastScalesCalculator = lastScalesCalculator
+        val lastLimitOffsetWithinBaseVisibleRect = lastLimitOffsetWithinBaseVisibleRect
+        val lastContainerWhitespace = lastContainerWhitespace
         val paramsChanges = checkParamsChanges(
             containerSize = containerSize,
             contentSize = contentSize,
@@ -321,6 +338,8 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
             rotation = rotation,
             readMode = readMode,
             scalesCalculator = scalesCalculator,
+            limitOffsetWithinBaseVisibleRect = limitOffsetWithinBaseVisibleRect,
+            containerWhitespace = containerWhitespace,
             lastContainerSize = lastContainerSize,
             lastContentSize = lastContentSize,
             lastContentOriginSize = lastContentOriginSize,
@@ -329,9 +348,11 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
             lastRotation = lastRotation,
             lastReadMode = lastReadMode,
             lastScalesCalculator = lastScalesCalculator,
+            lastLimitOffsetWithinBaseVisibleRect = lastLimitOffsetWithinBaseVisibleRect,
+            lastContainerWhitespace = lastContainerWhitespace,
         )
         if (paramsChanges == 0) {
-            logger.d { "reset:$caller. All parameters unchanged" }
+            logger.d { "ZoomableEngine. reset:$caller. skipped. All parameters unchanged" }
             return@coroutineScope
         }
 
@@ -340,7 +361,7 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
             contentSize = contentSize,
             contentOriginSize = contentOriginSize,
             contentScale = contentScale,
-            alignment = alignment,
+            alignment = alignment.rtlFlipped(view.layoutDirection),
             rotation = rotation,
             readMode = readMode,
             scalesCalculator = scalesCalculator,
@@ -361,7 +382,7 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
                 containerSize = containerSize,
                 contentSize = contentSize,
                 contentScale = contentScale,
-                alignment = alignment,
+                alignment = alignment.rtlFlipped(view.layoutDirection),
                 rotation = rotation,
                 newBaseTransform = newBaseTransform,
                 lastTransform = lastTransform,
@@ -379,7 +400,7 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
 
         logger.d {
             val transform = newBaseTransform + newUserTransform
-            "reset:$caller. " +
+            "ZoomableEngine. reset:$caller. " +
                     "containerSize=${containerSize.toShortString()}, " +
                     "contentSize=${contentSize.toShortString()}, " +
                     "contentOriginSize=${contentOriginSize.toShortString()}, " +
@@ -403,19 +424,20 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
             containerSize = containerSizeState.value,
             contentSize = contentSizeState.value,
             contentScale = contentScaleState.value,
-            alignment = alignmentState.value,
+            alignment = alignmentState.value.rtlFlipped(view.layoutDirection),
             rotation = rotation,
         ).round()
         _contentBaseVisibleRectState.value = calculateContentBaseVisibleRect(
             containerSize = containerSizeState.value,
             contentSize = contentSizeState.value,
             contentScale = contentScaleState.value,
-            alignment = alignmentState.value,
+            alignment = alignmentState.value.rtlFlipped(view.layoutDirection),
             rotation = rotation,
         ).round()
         _baseTransformState.value = newBaseTransform
         updateUserTransform(newUserTransform)
 
+        // TODO Improve it. Create a special parameter class to encapsulate it
         this@ZoomableEngine.lastInitialUserTransform = newInitialZoom.userTransform
         this@ZoomableEngine.lastContainerSize = containerSize
         this@ZoomableEngine.lastContentSize = contentSize
@@ -425,6 +447,8 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
         this@ZoomableEngine.lastReadMode = readMode
         this@ZoomableEngine.lastRotation = rotation
         this@ZoomableEngine.lastScalesCalculator = scalesCalculator
+        this@ZoomableEngine.lastLimitOffsetWithinBaseVisibleRect = limitOffsetWithinBaseVisibleRect
+        this@ZoomableEngine.lastContainerWhitespace = containerWhitespace
     }
 
     /**
@@ -458,7 +482,7 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
             containerSize = containerSize,
             contentSize = contentSize,
             contentScale = contentScale,
-            alignment = alignment,
+            alignment = alignment.rtlFlipped(view.layoutDirection),
             rotation = rotation,
             userScale = currentUserScale,
             userOffset = currentUserOffset,
@@ -480,7 +504,7 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
             val limitedAddUserScale = limitedTargetUserScale - currentUserScale
             val targetAddUserOffset = targetUserOffset - currentUserOffset
             val limitedTargetAddOffset = limitedTargetUserOffset - currentUserOffset
-            "scale. " +
+            "ZoomableEngine. scale. " +
                     "targetScale=${targetScale.format(4)}, " +
                     "centroidContentPoint=${centroidContentPoint.toShortString()}, " +
                     "animated=${animated}. " +
@@ -551,7 +575,7 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
             val currentUserOffset = currentUserTransform.offset
             val targetAddUserOffset = targetUserOffset - currentUserOffset
             val limitedTargetAddUserOffset = limitedTargetUserOffset - currentUserOffset
-            "offset. " +
+            "ZoomableEngine. offset. " +
                     "targetOffset=${targetOffset.toShortString()}, " +
                     "animated=${animated}. " +
                     "targetUserOffset=${targetUserOffset.toShortString()}, " +
@@ -601,7 +625,7 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
             containerSize = containerSize,
             contentSize = contentSize,
             contentScale = contentScale,
-            alignment = alignment,
+            alignment = alignment.rtlFlipped(view.layoutDirection),
             rotation = rotation,
             contentPoint = contentPoint.toOffset(),
         )
@@ -627,7 +651,7 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
             val targetAddUserOffset = targetUserOffset - currentUserOffset
             val limitedTargetAddUserOffset = limitedTargetUserOffset - currentUserOffset
             val limitedTargetAddUserScaleFormatted = limitedTargetAddUserScale.format(4)
-            "locate. " +
+            "ZoomableEngine. locate. " +
                     "contentPoint=${contentPoint.toShortString()}, " +
                     "targetScale=${targetScale.format(4)}, " +
                     "animated=${animated}. " +
@@ -700,7 +724,7 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
             containerSize = containerSize,
             contentSize = contentSize,
             contentScale = contentScale,
-            alignment = alignment,
+            alignment = alignment.rtlFlipped(view.layoutDirection),
             rotation = rotation,
             userScale = currentUserTransform.scaleX,
             userOffset = currentUserTransform.offset,
@@ -769,6 +793,16 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
                 reset("limitOffsetWithinBaseVisibleRectChanged")
             }
         }
+        coroutineScope.launch {
+            containerWhitespaceMultipleState.collect {
+                reset("containerWhitespaceMultipleChanged")
+            }
+        }
+        coroutineScope.launch {
+            containerWhitespaceState.collect {
+                reset("containerWhitespaceChanged")
+            }
+        }
     }
 
     private fun onDetachFromWindow() {
@@ -779,23 +813,22 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
         }
     }
 
-    @Suppress("RedundantSuspendModifier")
-    internal suspend fun stopAllAnimation(caller: String) {
+    internal fun stopAllAnimation(caller: String) {
         val lastScaleAnimatable = lastScaleAnimatable
         if (lastScaleAnimatable?.running == true) {
             lastScaleAnimatable.stop()
-            logger.d { "stopScaleAnimation:$caller" }
+            logger.d { "ZoomableEngine. stopScaleAnimation:$caller" }
         }
 
         val lastFlingAnimatable = lastFlingAnimatable
         if (lastFlingAnimatable?.running == true) {
             lastFlingAnimatable.stop()
-            logger.d { "stopFlingAnimation:$caller" }
+            logger.d { "ZoomableEngine. stopFlingAnimation:$caller" }
         }
 
         val lastContinuousTransformType = _continuousTransformTypeState.value
-        if (lastContinuousTransformType != ContinuousTransformType.NONE) {
-            _continuousTransformTypeState.value = ContinuousTransformType.NONE
+        if (lastContinuousTransformType != 0) {
+            _continuousTransformTypeState.value = 0
         }
     }
 
@@ -820,7 +853,7 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
             val startScale = currentScale
             val endScale = targetScale
             logger.d {
-                "rollbackScale. " +
+                "ZoomableEngine. rollbackScale. " +
                         "focus=${focus?.toShortString()}. " +
                         "startScale=${startScale.format(4)}, " +
                         "endScale=${endScale.format(4)}"
@@ -834,7 +867,7 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
                     durationMillis = animationSpec.durationMillis,
                     interpolator = animationSpec.interpolator,
                     onUpdateValue = { value ->
-                        val frameScale = com.github.panpf.zoomimage.view.internal.lerp(
+                        val frameScale = com.github.panpf.zoomimage.view.util.lerp(
                             start = startScale,
                             stop = endScale,
                             fraction = value
@@ -851,7 +884,7 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
                         }
                     },
                     onEnd = {
-                        _continuousTransformTypeState.value = ContinuousTransformType.NONE
+                        _continuousTransformTypeState.value = 0
                         continuation.resumeWith(Result.success(0))
                     }
                 )
@@ -905,7 +938,7 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
             val limitedAddUserScale = limitedTargetUserScale - currentUserScale
             val targetAddUserOffset = targetUserOffset - currentUserOffset
             val limitedTargetAddOffset = limitedTargetUserOffset - currentUserOffset
-            "transform. " +
+            "ZoomableEngine. transform. " +
                     "centroid=${centroid.toShortString()}, " +
                     "panChange=${panChange.toShortString()}, " +
                     "zoomChange=${zoomChange.format(4)}, " +
@@ -937,20 +970,21 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
             containerSize = containerSize,
             contentSize = contentSize,
             contentScale = contentScale,
-            alignment = alignment,
+            alignment = alignment.rtlFlipped(view.layoutDirection),
             rotation = rotation,
             userScale = currentUserTransform.scaleX,
             limitBaseVisibleRect = limitOffsetWithinBaseVisibleRectState.value,
+            containerWhitespace = calculateContainerWhitespace().rtlFlipped(view.layoutDirection),
         ).let {
             Rect(
-                it.left.roundToInt(),
-                it.top.roundToInt(),
-                it.right.roundToInt(),
-                it.bottom.roundToInt()
+                /* left = */ it.left.roundToInt(),
+                /* top = */ it.top.roundToInt(),
+                /* right = */ it.right.roundToInt(),
+                /* bottom = */ it.bottom.roundToInt()
             )
         }
         logger.d {
-            "fling. start. " +
+            "ZoomableEngine. fling. start. " +
                     "start=${startUserOffset.toShortString()}, " +
                     "bounds=${userOffsetBounds.toShortString()}, " +
                     "velocity=${velocity.toShortString()}"
@@ -965,7 +999,7 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
                     val newUserOffset =
                         this@ZoomableEngine.userTransformState.value.copy(offset = value.toOffset())
                     logger.d {
-                        "fling. running. " +
+                        "ZoomableEngine. fling. running. " +
                                 "velocity=$velocity. " +
                                 "startUserOffset=${startUserOffset.toShortString()}, " +
                                 "currentUserOffset=${newUserOffset.toShortString()}"
@@ -973,7 +1007,7 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
                     updateUserTransform(newUserOffset)
                 },
                 onEnd = {
-                    _continuousTransformTypeState.value = ContinuousTransformType.NONE
+                    _continuousTransformTypeState.value = 0
                     continuation.resumeWith(Result.success(0))
                 }
             )
@@ -990,7 +1024,7 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
     }
 
     internal fun checkSupportGestureType(@GestureType gestureType: Int): Boolean =
-        disabledGestureTypeState.value.and(gestureType) == 0
+        disabledGestureTypesState.value.and(gestureType) == 0
 
     private fun limitUserScale(targetUserScale: Float): Float {
         val minUserScale = minScaleState.value / baseTransformState.value.scaleX
@@ -1005,7 +1039,8 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
             currentScale = userTransformState.value.scaleX,
             targetScale = targetUserScale,
             minScale = minUserScale,
-            maxScale = maxUserScale
+            maxScale = maxUserScale,
+            rubberBandRatio = 2f,
         )
     }
 
@@ -1014,10 +1049,11 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
             containerSize = containerSizeState.value,
             contentSize = contentSizeState.value,
             contentScale = contentScaleState.value,
-            alignment = alignmentState.value,
+            alignment = alignmentState.value.rtlFlipped(view.layoutDirection),
             rotation = rotation,
             userScale = userScale,
             limitBaseVisibleRect = limitOffsetWithinBaseVisibleRectState.value,
+            containerWhitespace = calculateContainerWhitespace().rtlFlipped(view.layoutDirection),
         ).round().toRect()      // round() makes sense
         return userOffset.limitTo(userOffsetBounds)
     }
@@ -1044,14 +1080,14 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
                         fraction = value
                     )
                     logger.d {
-                        "$caller. animated running. fraction=$value, transform=${userTransform.toShortString()}"
+                        "ZoomableEngine. $caller. animated running. fraction=$value, transform=${userTransform.toShortString()}"
                     }
                     this@ZoomableEngine._userTransformState.value = userTransform
                     updateTransform()
                 },
                 onEnd = {
                     if (newContinuousTransformType != null) {
-                        _continuousTransformTypeState.value = ContinuousTransformType.NONE
+                        _continuousTransformTypeState.value = 0
                     }
                     continuation.resumeWith(Result.success(0))
                 }
@@ -1082,7 +1118,7 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
             containerSize = containerSizeState.value,
             contentSize = contentSizeState.value,
             contentScale = contentScaleState.value,
-            alignment = alignmentState.value,
+            alignment = alignmentState.value.rtlFlipped(view.layoutDirection),
             rotation = rotation,
             userScale = userTransform.scaleX,
             userOffset = userTransform.offset,
@@ -1091,7 +1127,7 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
             containerSize = containerSizeState.value,
             contentSize = contentSizeState.value,
             contentScale = contentScaleState.value,
-            alignment = alignmentState.value,
+            alignment = alignmentState.value.rtlFlipped(view.layoutDirection),
             rotation = rotation,
             userScale = userTransform.scaleX,
             userOffset = userTransform.offset,
@@ -1101,10 +1137,11 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
             containerSize = containerSizeState.value,
             contentSize = contentSizeState.value,
             contentScale = contentScaleState.value,
-            alignment = alignmentState.value,
+            alignment = alignmentState.value.rtlFlipped(view.layoutDirection),
             rotation = rotation,
             userScale = userTransform.scaleX,
             limitBaseVisibleRect = limitOffsetWithinBaseVisibleRectState.value,
+            containerWhitespace = calculateContainerWhitespace().rtlFlipped(view.layoutDirection),
         )
         this._userOffsetBoundsState.value = userOffsetBounds.round()
 
@@ -1112,6 +1149,22 @@ class ZoomableEngine constructor(logger: Logger, val view: View) {
             userOffsetBounds = userOffsetBounds,
             userOffset = userTransform.offset,
         )
+    }
+
+    private fun calculateContainerWhitespace(): ContainerWhitespace {
+        val containerWhitespace = containerWhitespaceState.value
+        val containerSize = containerSizeState.value
+        val containerWhitespaceMultiple = containerWhitespaceMultipleState.value
+        return if (!containerWhitespace.isEmpty()) {
+            containerWhitespace
+        } else if (containerSize.isNotEmpty() && containerWhitespaceMultiple != 0f) {
+            ContainerWhitespace(
+                horizontal = containerSize.width * containerWhitespaceMultiple,
+                vertical = containerSize.height * containerWhitespaceMultiple
+            )
+        } else {
+            ContainerWhitespace.Zero
+        }
     }
 
     override fun toString(): String =

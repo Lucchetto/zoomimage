@@ -1,104 +1,71 @@
 plugins {
-    alias(libs.plugins.org.jetbrains.kotlin.multiplatform)
-    alias(libs.plugins.com.android.library)
-    alias(libs.plugins.org.jetbrains.compose)
+    id("com.android.library")
+    id("com.codingfeline.buildkonfig")
+    id("org.jetbrains.kotlin.multiplatform")
+    id("org.jetbrains.kotlinx.atomicfu")
+    id("org.jetbrains.kotlinx.kover")
 }
 
-kotlin {
-    androidTarget {
-        publishLibraryVariants("release")
-        compilations.configureEach {
-            kotlinOptions {
-                jvmTarget = "1.8"
-            }
-        }
-    }
+addAllMultiplatformTargets()
 
-    jvm("desktop") {
-        compilations.configureEach {
-            kotlinOptions {
-                jvmTarget = "1.8"
-            }
-        }
-    }
-
-    sourceSets {
-        named("androidMain") {
-            dependencies {
-                api(libs.kotlinx.coroutines.android)
-                api(libs.androidx.exifinterface)
-                api(libs.androidx.lifecycle.common)
-            }
-        }
-        named("androidInstrumentedTest") {
-            dependencies {
-                implementation(libs.junit)
-                implementation(libs.panpf.tools4j.test)
-                implementation(libs.androidx.test.ext.junit)
-                implementation(libs.androidx.test.runner)
-                implementation(libs.androidx.test.rules)
-                implementation(project(":zoomimage-resources"))
-            }
-        }
-
-        named("commonMain") {
-            dependencies {
-                api(libs.androidx.annotation)
-                api(libs.kotlinx.coroutines.core)
-
-                implementation(compose.runtime)
-            }
-        }
-        named("commonTest") {
-            dependencies {
-                implementation(kotlin("test"))
-                implementation(libs.junit)
-                implementation(libs.panpf.tools4j.test)
-            }
-        }
-
-        named("desktopMain") {
-            dependencies {
-                api(libs.kotlinx.coroutines.swing)
-                api("com.drewnoakes:metadata-extractor:2.18.0")
-
-                implementation(compose.desktop.currentOs)
-            }
-        }
-
-        named("desktopTest") {
-            dependencies {
-                implementation(project(":zoomimage-resources"))
-            }
-        }
-    }
-}
-
-compose {
-    val compilerDependencyDeclaration =
-        libs.androidx.compose.compiler.get().run { "$module:$version" }
-    kotlinCompilerPlugin.set(compilerDependencyDeclaration)
-}
-
-android {
-    namespace = "com.github.panpf.zoomimage.core"
-    compileSdk = property("compileSdk").toString().toInt()
-
-    defaultConfig {
-        minSdk = property("minSdk").toString().toInt()
-
-        buildConfigField("String", "VERSION_NAME", "\"${property("versionName").toString()}\"")
-        buildConfigField("int", "VERSION_CODE", property("versionCode").toString())
-
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    }
-
+androidLibrary(nameSpace = "com.github.panpf.zoomimage.core") {
     buildFeatures {
         buildConfig = true
     }
+    defaultConfig {
+        buildConfigField("String", "VERSION_NAME", "\"${project.versionName}\"")
+        buildConfigField("int", "VERSION_CODE", project.versionCode.toString())
+    }
+}
 
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+kotlin {
+    sourceSets {
+        commonMain.dependencies {
+            api(libs.jetbrains.lifecycle.common)
+            api(libs.kotlin.stdlib)
+            api(libs.kotlinx.coroutines.core)
+            api(libs.okio)
+        }
+        androidMain.dependencies {
+            api(libs.androidx.exifinterface)
+            api(libs.kotlinx.coroutines.android)
+        }
+        desktopMain.dependencies {
+            api(libs.kotlinx.coroutines.swing)
+        }
+        nonAndroidMain.dependencies {
+            api(libs.skiko)
+        }
+
+        commonTest.dependencies {
+            implementation(projects.internal.testCore)
+        }
+        androidInstrumentedTest.dependencies {
+            implementation(projects.internal.testCore)
+        }
+    }
+}
+
+buildkonfig {
+    packageName = "com.github.panpf.zoomimage.core"
+    defaultConfigs {
+        buildConfigField(
+            type = com.codingfeline.buildkonfig.compiler.FieldSpec.Type.STRING,
+            name = "VERSION_NAME",
+            value = project.versionName,
+            const = true
+        )
+        buildConfigField(
+            type = com.codingfeline.buildkonfig.compiler.FieldSpec.Type.STRING,
+            name = "VERSION_CODE",
+            value = project.versionCode.toString(),
+            const = true
+        )
+        buildConfigField(
+            type = com.codingfeline.buildkonfig.compiler.FieldSpec.Type.STRING,
+            name = "SKIKO_VERSION_NAME",
+            value = libs.versions.skiko.get(),
+            const = true
+        )
     }
 }

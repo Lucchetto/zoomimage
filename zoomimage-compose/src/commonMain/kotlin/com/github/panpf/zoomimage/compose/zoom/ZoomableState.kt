@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 panpf <panpfpanpf@outlook.com>
+ * Copyright (C) 2024 panpf <panpfpanpf@outlook.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,32 +37,35 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.center
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.round
 import androidx.compose.ui.unit.toSize
-import com.github.panpf.zoomimage.compose.internal.convert
-import com.github.panpf.zoomimage.compose.internal.format
-import com.github.panpf.zoomimage.compose.internal.isNotEmpty
-import com.github.panpf.zoomimage.compose.internal.limitTo
-import com.github.panpf.zoomimage.compose.internal.name
-import com.github.panpf.zoomimage.compose.internal.roundToPlatform
-import com.github.panpf.zoomimage.compose.internal.times
-import com.github.panpf.zoomimage.compose.internal.toCompat
-import com.github.panpf.zoomimage.compose.internal.toCompatOffset
-import com.github.panpf.zoomimage.compose.internal.toHexString
-import com.github.panpf.zoomimage.compose.internal.toPlatform
-import com.github.panpf.zoomimage.compose.internal.toPlatformRect
-import com.github.panpf.zoomimage.compose.internal.toShortString
 import com.github.panpf.zoomimage.compose.rememberZoomImageLogger
 import com.github.panpf.zoomimage.compose.subsampling.SubsamplingState
+import com.github.panpf.zoomimage.compose.util.ScaleFactor
+import com.github.panpf.zoomimage.compose.util.format
+import com.github.panpf.zoomimage.compose.util.isNotEmpty
+import com.github.panpf.zoomimage.compose.util.limitTo
+import com.github.panpf.zoomimage.compose.util.name
+import com.github.panpf.zoomimage.compose.util.roundToPlatform
+import com.github.panpf.zoomimage.compose.util.rtlFlipped
+import com.github.panpf.zoomimage.compose.util.times
+import com.github.panpf.zoomimage.compose.util.toCompat
+import com.github.panpf.zoomimage.compose.util.toCompatOffset
+import com.github.panpf.zoomimage.compose.util.toPlatform
+import com.github.panpf.zoomimage.compose.util.toPlatformRect
+import com.github.panpf.zoomimage.compose.util.toShortString
 import com.github.panpf.zoomimage.util.Logger
 import com.github.panpf.zoomimage.util.plus
 import com.github.panpf.zoomimage.util.round
 import com.github.panpf.zoomimage.util.toShortString
+import com.github.panpf.zoomimage.zoom.ContainerWhitespace
 import com.github.panpf.zoomimage.zoom.ContinuousTransformType
 import com.github.panpf.zoomimage.zoom.GestureType
 import com.github.panpf.zoomimage.zoom.OneFingerScaleSpec
@@ -85,6 +88,7 @@ import com.github.panpf.zoomimage.zoom.canScrollByEdge
 import com.github.panpf.zoomimage.zoom.checkParamsChanges
 import com.github.panpf.zoomimage.zoom.contentPointToContainerPoint
 import com.github.panpf.zoomimage.zoom.contentPointToTouchPoint
+import com.github.panpf.zoomimage.zoom.isEmpty
 import com.github.panpf.zoomimage.zoom.limitScaleWithRubberBand
 import com.github.panpf.zoomimage.zoom.touchPointToContentPoint
 import com.github.panpf.zoomimage.zoom.transformAboutEquals
@@ -98,22 +102,25 @@ import kotlinx.coroutines.launch
 
 /**
  * Creates and remember a [ZoomableState] that can be used to control the scale, pan, rotation of the content.
+ *
+ * @see com.github.panpf.zoomimage.compose.common.test.zoom.ZoomableStateTest.testRememberZoomableState
  */
 @Composable
 fun rememberZoomableState(logger: Logger = rememberZoomImageLogger()): ZoomableState {
-    val zoomableState = remember(logger) {
-        ZoomableState(logger)
+    val layoutDirection = LocalLayoutDirection.current
+    val zoomableState = remember(logger, layoutDirection) {
+        ZoomableState(logger, layoutDirection)
     }
     return zoomableState
 }
 
 /**
  * A state object that can be used to control the scale, pan, rotation of the content.
+ *
+ * @see com.github.panpf.zoomimage.compose.common.test.zoom.ZoomableStateTest
  */
 @Stable
-class ZoomableState(logger: Logger) : RememberObserver {
-
-    val logger: Logger = logger.newLogger(module = "ZoomableState@${logger.toHexString()}")
+class ZoomableState(val logger: Logger, val layoutDirection: LayoutDirection) : RememberObserver {
 
     private var coroutineScope: CoroutineScope? = null
     private var lastScaleAnimatable: Animatable<*, *>? = null
@@ -131,7 +138,6 @@ class ZoomableState(logger: Logger) : RememberObserver {
      * The size of the content, usually Painter.intrinsicSize.round(), setup by the ZoomImage component
      */
     var contentSize: IntSize by mutableStateOf(IntSize.Zero)
-        .convert { if (it.isNotEmpty()) it else containerSize }
 
     /**
      * The original size of the content, it is usually set by [SubsamplingState] after parsing the original size of the image
@@ -190,11 +196,31 @@ class ZoomableState(logger: Logger) : RememberObserver {
     var limitOffsetWithinBaseVisibleRect: Boolean by mutableStateOf(false)
 
     /**
+     * Add whitespace around containers based on container size
+     */
+    var containerWhitespaceMultiple: Float by mutableStateOf(0f)
+
+    /**
+     * Add whitespace around containers, has higher priority than [containerWhitespaceMultiple]
+     */
+    var containerWhitespace: ContainerWhitespace by mutableStateOf(ContainerWhitespace.Zero)
+
+    /**
      * Disabled gesture types. Allow multiple types to be combined through the 'and' operator
      *
      * @see com.github.panpf.zoomimage.zoom.GestureType
      */
-    var disabledGestureType: Int by mutableIntStateOf(0)
+    var disabledGestureTypes: Int by mutableIntStateOf(0)
+
+    /**
+     * Whether to reverse the scale of the mouse wheel, the default is false
+     */
+    var reverseMouseWheelScale: Boolean by mutableStateOf(false)
+
+    /**
+     * Zoom increment converter when zooming with mouse wheel
+     */
+    var mouseWheelScaleScrollDeltaConverter: (Float) -> Float = { it * 0.33f }
 
 
     /* *********************************** Information properties ******************************* */
@@ -239,14 +265,6 @@ class ZoomableState(logger: Logger) : RememberObserver {
         private set
 
     /**
-     * The type of transformation currently in progress
-     *
-     * @see ContinuousTransformType
-     */
-    var continuousTransformType: Int by mutableIntStateOf(ContinuousTransformType.NONE)
-        internal set
-
-    /**
      * The content region in the container after the baseTransform transformation
      */
     var contentBaseDisplayRect: IntRect by mutableStateOf(IntRect.Zero)
@@ -271,16 +289,24 @@ class ZoomableState(logger: Logger) : RememberObserver {
         private set
 
     /**
+     * The offset boundary of userTransform, affected by scale and limitOffsetWithinBaseVisibleRect
+     */
+    var userOffsetBounds: IntRect by mutableStateOf(IntRect.Zero)
+        private set
+
+    /**
      * Edge state for the current offset
      */
     var scrollEdge: ScrollEdge by mutableStateOf(ScrollEdge.Default)
         private set
 
     /**
-     * The offset boundary of userTransform, affected by scale and limitOffsetWithinBaseVisibleRect
+     * The type of transformation currently in progress
+     *
+     * @see ContinuousTransformType
      */
-    var userOffsetBounds: IntRect by mutableStateOf(IntRect.Zero)
-        private set
+    var continuousTransformType: Int by mutableIntStateOf(0)
+        internal set
 
     private var lastContainerSize: IntSize = containerSize
     private var lastContentSize: IntSize = contentSize
@@ -290,6 +316,8 @@ class ZoomableState(logger: Logger) : RememberObserver {
     private var lastRotation: Int = rotation
     private var lastReadMode: ReadMode? = readMode
     private var lastScalesCalculator: ScalesCalculator = scalesCalculator
+    private var lastLimitOffsetWithinBaseVisibleRect: Boolean = limitOffsetWithinBaseVisibleRect
+    private var lastContainerWhitespace: ContainerWhitespace = calculateContainerWhitespace()
 
 
     /* ********************************* Interact with consumers ******************************** */
@@ -310,6 +338,8 @@ class ZoomableState(logger: Logger) : RememberObserver {
         val readMode = readMode
         val rotation = rotation
         val scalesCalculator = scalesCalculator
+        val limitOffsetWithinBaseVisibleRect = limitOffsetWithinBaseVisibleRect
+        val containerWhitespace = calculateContainerWhitespace()
         val lastContainerSize = lastContainerSize
         val lastContentSize = lastContentSize
         val lastContentOriginSize = lastContentOriginSize
@@ -318,6 +348,8 @@ class ZoomableState(logger: Logger) : RememberObserver {
         val lastReadMode = lastReadMode
         val lastRotation = lastRotation
         val lastScalesCalculator = lastScalesCalculator
+        val lastLimitOffsetWithinBaseVisibleRect = lastLimitOffsetWithinBaseVisibleRect
+        val lastContainerWhitespace = lastContainerWhitespace
 
         val paramsChanges = checkParamsChanges(
             containerSize = containerSize.toCompat(),
@@ -328,6 +360,8 @@ class ZoomableState(logger: Logger) : RememberObserver {
             rotation = rotation,
             readMode = readMode,
             scalesCalculator = scalesCalculator,
+            limitOffsetWithinBaseVisibleRect = limitOffsetWithinBaseVisibleRect,
+            containerWhitespace = containerWhitespace,
             lastContainerSize = lastContainerSize.toCompat(),
             lastContentSize = lastContentSize.toCompat(),
             lastContentOriginSize = lastContentOriginSize.toCompat(),
@@ -336,9 +370,11 @@ class ZoomableState(logger: Logger) : RememberObserver {
             lastRotation = lastRotation,
             lastReadMode = lastReadMode,
             lastScalesCalculator = lastScalesCalculator,
+            lastLimitOffsetWithinBaseVisibleRect = lastLimitOffsetWithinBaseVisibleRect,
+            lastContainerWhitespace = lastContainerWhitespace,
         )
         if (paramsChanges == 0) {
-            logger.d { "reset:$caller. All parameters unchanged" }
+            logger.d { "ZoomableState. reset:$caller. skipped. All parameters unchanged" }
             return@coroutineScope
         }
 
@@ -347,7 +383,7 @@ class ZoomableState(logger: Logger) : RememberObserver {
             contentSize = contentSize.toCompat(),
             contentOriginSize = contentOriginSize.toCompat(),
             contentScale = contentScale.toCompat(),
-            alignment = alignment.toCompat(),
+            alignment = alignment.rtlFlipped(layoutDirection).toCompat(),
             rotation = rotation,
             readMode = readMode,
             scalesCalculator = scalesCalculator,
@@ -368,7 +404,7 @@ class ZoomableState(logger: Logger) : RememberObserver {
                 containerSize = containerSize.toCompat(),
                 contentSize = contentSize.toCompat(),
                 contentScale = contentScale.toCompat(),
-                alignment = alignment.toCompat(),
+                alignment = alignment.rtlFlipped(layoutDirection).toCompat(),
                 rotation = rotation,
                 newBaseTransform = newBaseTransform,
                 lastTransform = lastTransform.toCompat(),
@@ -386,7 +422,7 @@ class ZoomableState(logger: Logger) : RememberObserver {
 
         logger.d {
             val transform = newBaseTransform + newUserTransform
-            "reset:$caller. " +
+            "ZoomableState. reset:$caller. " +
                     "containerSize=${containerSize.toShortString()}, " +
                     "contentSize=${contentSize.toShortString()}, " +
                     "contentOriginSize=${contentOriginSize.toShortString()}, " +
@@ -411,19 +447,20 @@ class ZoomableState(logger: Logger) : RememberObserver {
             containerSize = containerSize.toCompat(),
             contentSize = contentSize.toCompat(),
             contentScale = contentScale.toCompat(),
-            alignment = alignment.toCompat(),
+            alignment = alignment.rtlFlipped(layoutDirection).toCompat(),
             rotation = rotation,
         ).roundToPlatform()
         contentBaseVisibleRect = calculateContentBaseVisibleRect(
             containerSize = containerSize.toCompat(),
             contentSize = contentSize.toCompat(),
             contentScale = contentScale.toCompat(),
-            alignment = alignment.toCompat(),
+            alignment = alignment.rtlFlipped(layoutDirection).toCompat(),
             rotation = rotation,
         ).roundToPlatform()
         baseTransform = newBaseTransform.toPlatform()
         updateUserTransform(newUserTransform.toPlatform())
 
+        // TODO Improve it. Create a special parameter class to encapsulate it
         this@ZoomableState.lastInitialUserTransform = newInitialZoom.userTransform.toPlatform()
         this@ZoomableState.lastContainerSize = containerSize
         this@ZoomableState.lastContentSize = contentSize
@@ -433,6 +470,8 @@ class ZoomableState(logger: Logger) : RememberObserver {
         this@ZoomableState.lastReadMode = readMode
         this@ZoomableState.lastRotation = rotation
         this@ZoomableState.lastScalesCalculator = scalesCalculator
+        this@ZoomableState.lastLimitOffsetWithinBaseVisibleRect = limitOffsetWithinBaseVisibleRect
+        this@ZoomableState.lastContainerWhitespace = containerWhitespace
     }
 
     /**
@@ -464,7 +503,7 @@ class ZoomableState(logger: Logger) : RememberObserver {
             containerSize = containerSize.toCompat(),
             contentSize = contentSize.toCompat(),
             contentScale = contentScale.toCompat(),
-            alignment = alignment.toCompat(),
+            alignment = alignment.rtlFlipped(layoutDirection).toCompat(),
             rotation = rotation,
             userScale = currentUserScale,
             userOffset = currentUserOffset.toCompat(),
@@ -478,7 +517,7 @@ class ZoomableState(logger: Logger) : RememberObserver {
         ).toPlatform()
         val limitedTargetUserOffset = limitUserOffset(targetUserOffset, limitedTargetUserScale)
         val limitedTargetUserTransform = currentUserTransform.copy(
-            scale = com.github.panpf.zoomimage.compose.internal.ScaleFactor(limitedTargetUserScale),
+            scale = ScaleFactor(limitedTargetUserScale),
             offset = limitedTargetUserOffset
         )
         logger.d {
@@ -486,7 +525,7 @@ class ZoomableState(logger: Logger) : RememberObserver {
             val limitedAddUserScale = limitedTargetUserScale - currentUserScale
             val targetAddUserOffset = targetUserOffset - currentUserOffset
             val limitedTargetAddOffset = limitedTargetUserOffset - currentUserOffset
-            "scale. " +
+            "ZoomableState. scale. " +
                     "targetScale=${targetScale.format(4)}, " +
                     "centroidContentPoint=${centroidContentPoint.toShortString()}, " +
                     "animated=${animated}. " +
@@ -558,7 +597,7 @@ class ZoomableState(logger: Logger) : RememberObserver {
             val currentUserOffset = currentUserTransform.offset
             val targetAddUserOffset = targetUserOffset - currentUserOffset
             val limitedTargetAddUserOffset = limitedTargetUserOffset - currentUserOffset
-            "offset. " +
+            "ZoomableState. offset. " +
                     "targetOffset=${targetOffset.toShortString()}, " +
                     "animated=${animated}. " +
                     "targetUserOffset=${targetUserOffset.toShortString()}, " +
@@ -606,7 +645,7 @@ class ZoomableState(logger: Logger) : RememberObserver {
             containerSize = containerSize.toCompat(),
             contentSize = contentSize.toCompat(),
             contentScale = contentScale.toCompat(),
-            alignment = alignment.toCompat(),
+            alignment = alignment.rtlFlipped(layoutDirection).toCompat(),
             rotation = rotation,
             contentPoint = contentPoint.toCompatOffset(),
         )
@@ -621,7 +660,7 @@ class ZoomableState(logger: Logger) : RememberObserver {
         ).toPlatform()
         val limitedTargetUserOffset = limitUserOffset(targetUserOffset, limitedTargetUserScale)
         val limitedTargetUserTransform = currentUserTransform.copy(
-            scale = com.github.panpf.zoomimage.compose.internal.ScaleFactor(limitedTargetUserScale),
+            scale = ScaleFactor(limitedTargetUserScale),
             offset = limitedTargetUserOffset
         )
         logger.d {
@@ -632,7 +671,7 @@ class ZoomableState(logger: Logger) : RememberObserver {
             val targetAddUserOffset = targetUserOffset - currentUserOffset
             val limitedTargetAddUserOffset = limitedTargetUserOffset - currentUserOffset
             val limitedTargetAddUserScaleFormatted = limitedTargetAddUserScale.format(4)
-            "locate. " +
+            "ZoomableState. locate. " +
                     "contentPoint=${contentPoint.toShortString()}, " +
                     "targetScale=${targetScale.format(4)}, " +
                     "animated=${animated}. " +
@@ -703,7 +742,7 @@ class ZoomableState(logger: Logger) : RememberObserver {
             containerSize = containerSize.toCompat(),
             contentSize = contentSize.toCompat(),
             contentScale = contentScale.toCompat(),
-            alignment = alignment.toCompat(),
+            alignment = alignment.rtlFlipped(layoutDirection).toCompat(),
             rotation = rotation,
             userScale = currentUserTransform.scaleX,
             userOffset = currentUserTransform.offset.toCompat(),
@@ -776,6 +815,16 @@ class ZoomableState(logger: Logger) : RememberObserver {
                 reset("limitOffsetWithinBaseVisibleRectChanged")
             }
         }
+        coroutineScope.launch {
+            snapshotFlow { containerWhitespaceMultiple }.collect {
+                reset("containerWhitespaceMultipleChanged")
+            }
+        }
+        coroutineScope.launch {
+            snapshotFlow { containerWhitespace }.collect {
+                reset("containerWhitespaceChanged")
+            }
+        }
     }
 
     override fun onAbandoned() = onForgotten()
@@ -800,18 +849,18 @@ class ZoomableState(logger: Logger) : RememberObserver {
         val lastScaleAnimatable = lastScaleAnimatable
         if (lastScaleAnimatable?.isRunning == true) {
             lastScaleAnimatable.stop()
-            logger.d { "stopScaleAnimation:$caller" }
+            logger.d { "ZoomableState. stopScaleAnimation:$caller" }
         }
 
         val lastFlingAnimatable = lastFlingAnimatable
         if (lastFlingAnimatable?.isRunning == true) {
             lastFlingAnimatable.stop()
-            logger.d { "stopFlingAnimation:$caller" }
+            logger.d { "ZoomableState. stopFlingAnimation:$caller" }
         }
 
         val lastContinuousTransformType = continuousTransformType
-        if (lastContinuousTransformType != ContinuousTransformType.NONE) {
-            continuousTransformType = ContinuousTransformType.NONE
+        if (lastContinuousTransformType != 0) {
+            continuousTransformType = 0
         }
     }
 
@@ -832,7 +881,7 @@ class ZoomableState(logger: Logger) : RememberObserver {
             val startScale = currentScale
             val endScale = targetScale
             logger.d {
-                "rollbackScale. " +
+                "ZoomableState. rollbackScale. " +
                         "centroid=${centroid?.toShortString()}. " +
                         "startScale=${startScale.format(4)}, " +
                         "endScale=${endScale.format(4)}"
@@ -869,7 +918,7 @@ class ZoomableState(logger: Logger) : RememberObserver {
             } catch (e: CancellationException) {
                 throw e
             } finally {
-                continuousTransformType = ContinuousTransformType.NONE
+                continuousTransformType = 0
             }
         }
         targetScale != null
@@ -904,7 +953,7 @@ class ZoomableState(logger: Logger) : RememberObserver {
         ).toPlatform()
         val limitedTargetUserOffset = limitUserOffset(targetUserOffset, limitedTargetUserScale)
         val limitedTargetUserTransform = currentUserTransform.copy(
-            scale = com.github.panpf.zoomimage.compose.internal.ScaleFactor(limitedTargetUserScale),
+            scale = ScaleFactor(limitedTargetUserScale),
             offset = limitedTargetUserOffset
         )
         logger.d {
@@ -912,7 +961,7 @@ class ZoomableState(logger: Logger) : RememberObserver {
             val limitedAddUserScale = limitedTargetUserScale - currentUserScale
             val targetAddUserOffset = targetUserOffset - currentUserOffset
             val limitedTargetAddOffset = limitedTargetUserOffset - currentUserOffset
-            "transform. " +
+            "ZoomableState. transform. " +
                     "centroid=${centroid.toShortString()}, " +
                     "panChange=${panChange.toShortString()}, " +
                     "zoomChange=${zoomChange.format(4)}, " +
@@ -935,6 +984,12 @@ class ZoomableState(logger: Logger) : RememberObserver {
         stopAllAnimation("fling")
 
         val startUserOffset = currentUserTransform.offset
+        logger.d {
+            "ZoomableState. fling. start. " +
+                    "start=${startUserOffset.toShortString()}, " +
+                    "bounds=${userOffsetBounds.toShortString()}, " +
+                    "velocity=${velocity}"
+        }
         val flingAnimatable = Animatable(
             initialValue = startUserOffset,
             typeConverter = Offset.VectorConverter,
@@ -957,7 +1012,7 @@ class ZoomableState(logger: Logger) : RememberObserver {
                             limitUserOffset(targetUserOffset, currentUserTransform2.scaleX)
                         if (limitedTargetUserOffset != currentUserTransform2.offset) {
                             logger.d {
-                                "fling. running. " +
+                                "ZoomableState. fling. running. " +
                                         "velocity=$velocity. " +
                                         "startUserOffset=${startUserOffset.toShortString()}, " +
                                         "currentUserOffset=${limitedTargetUserOffset.toShortString()}"
@@ -969,13 +1024,13 @@ class ZoomableState(logger: Logger) : RememberObserver {
                             // SubsamplingState(line 87) relies on the fling state to refresh tiles,
                             // so you need to end the fling animation as soon as possible
                             job?.cancel("reachBounds")
-                            continuousTransformType = ContinuousTransformType.NONE
+                            continuousTransformType = 0
                         }
                     }
                 } catch (e: CancellationException) {
                     throw e
                 } finally {
-                    continuousTransformType = ContinuousTransformType.NONE
+                    continuousTransformType = 0
                 }
             }
         }
@@ -983,7 +1038,7 @@ class ZoomableState(logger: Logger) : RememberObserver {
     }
 
     internal fun checkSupportGestureType(@GestureType gestureType: Int): Boolean =
-        disabledGestureType.and(gestureType) == 0
+        disabledGestureTypes.and(gestureType) == 0
 
     private fun limitUserScale(targetUserScale: Float): Float {
         val minUserScale = minScale / baseTransform.scaleX
@@ -998,7 +1053,8 @@ class ZoomableState(logger: Logger) : RememberObserver {
             currentScale = userTransform.scaleX,
             targetScale = targetUserScale,
             minScale = minUserScale,
-            maxScale = maxUserScale
+            maxScale = maxUserScale,
+            rubberBandRatio = 2f,
         )
     }
 
@@ -1007,10 +1063,11 @@ class ZoomableState(logger: Logger) : RememberObserver {
             containerSize = containerSize.toCompat(),
             contentSize = contentSize.toCompat(),
             contentScale = contentScale.toCompat(),
-            alignment = alignment.toCompat(),
+            alignment = alignment.rtlFlipped(layoutDirection).toCompat(),
             rotation = rotation,
             userScale = userScale,
             limitBaseVisibleRect = limitOffsetWithinBaseVisibleRect,
+            containerWhitespace = calculateContainerWhitespace().rtlFlipped(layoutDirection),
         ).round().toPlatformRect()    // round() makes sense
         return userOffset.limitTo(userOffsetBounds)
     }
@@ -1043,7 +1100,7 @@ class ZoomableState(logger: Logger) : RememberObserver {
                     fraction = value
                 )
                 logger.d {
-                    "$caller. animated running. transform=${userTransform.toShortString()}"
+                    "ZoomableState. $caller. animated running. transform=${userTransform.toShortString()}"
                 }
                 this@ZoomableState.userTransform = userTransform
                 updateTransform()
@@ -1052,7 +1109,7 @@ class ZoomableState(logger: Logger) : RememberObserver {
             throw e
         } finally {
             if (newContinuousTransformType != null) {
-                continuousTransformType = ContinuousTransformType.NONE
+                continuousTransformType = 0
             }
         }
     }
@@ -1070,7 +1127,7 @@ class ZoomableState(logger: Logger) : RememberObserver {
             containerSize = containerSize.toCompat(),
             contentSize = contentSize.toCompat(),
             contentScale = contentScale.toCompat(),
-            alignment = alignment.toCompat(),
+            alignment = alignment.rtlFlipped(layoutDirection).toCompat(),
             rotation = rotation,
             userScale = userTransform.scaleX,
             userOffset = userTransform.offset.toCompat(),
@@ -1079,7 +1136,7 @@ class ZoomableState(logger: Logger) : RememberObserver {
             containerSize = containerSize.toCompat(),
             contentSize = contentSize.toCompat(),
             contentScale = contentScale.toCompat(),
-            alignment = alignment.toCompat(),
+            alignment = alignment.rtlFlipped(layoutDirection).toCompat(),
             rotation = rotation,
             userScale = userTransform.scaleX,
             userOffset = userTransform.offset.toCompat(),
@@ -1089,10 +1146,11 @@ class ZoomableState(logger: Logger) : RememberObserver {
             containerSize = containerSize.toCompat(),
             contentSize = contentSize.toCompat(),
             contentScale = contentScale.toCompat(),
-            alignment = alignment.toCompat(),
+            alignment = alignment.rtlFlipped(layoutDirection).toCompat(),
             rotation = rotation,
             userScale = userTransform.scaleX,
             limitBaseVisibleRect = limitOffsetWithinBaseVisibleRect,
+            containerWhitespace = calculateContainerWhitespace().rtlFlipped(layoutDirection),
         )
         this.userOffsetBounds = userOffsetBounds.roundToPlatform()
 
@@ -1100,6 +1158,22 @@ class ZoomableState(logger: Logger) : RememberObserver {
             userOffsetBounds = userOffsetBounds,
             userOffset = userTransform.offset.toCompat(),
         )
+    }
+
+    private fun calculateContainerWhitespace(): ContainerWhitespace {
+        val containerWhitespace = containerWhitespace
+        val containerSize = containerSize
+        val containerWhitespaceMultiple = containerWhitespaceMultiple
+        return if (!containerWhitespace.isEmpty()) {
+            containerWhitespace
+        } else if (containerSize.isNotEmpty() && containerWhitespaceMultiple != 0f) {
+            ContainerWhitespace(
+                horizontal = containerSize.width * containerWhitespaceMultiple,
+                vertical = containerSize.height * containerWhitespaceMultiple
+            )
+        } else {
+            ContainerWhitespace.Zero
+        }
     }
 
     override fun toString(): String =

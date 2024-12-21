@@ -1,32 +1,13 @@
 plugins {
-    alias(libs.plugins.com.android.library)
-    alias(libs.plugins.org.jetbrains.kotlin.android)
+    id("com.android.library")
+    id("org.jetbrains.kotlin.android")
 }
 
-android {
-    namespace = "com.github.panpf.zoomimage.view.picasso"
-    compileSdk = property("compileSdk").toString().toInt()
-
-    defaultConfig {
-        minSdk = property("minSdk").toString().toInt()
-
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
-    }
-    kotlinOptions {
-        jvmTarget = "1.8"
-    }
-}
+androidLibrary(nameSpace = "com.github.panpf.zoomimage.view.picasso")
 
 dependencies {
-    api(project(":zoomimage-view"))
-    api(project(":zoomimage-core-picasso"))
+    api(projects.zoomimageView)
+    api(projects.zoomimageCorePicasso)
 
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.test.ext.junit)
-    androidTestImplementation(libs.androidx.test.runner)
-    androidTestImplementation(libs.androidx.test.rules)
+    androidTestImplementation(projects.internal.testView)
 }
