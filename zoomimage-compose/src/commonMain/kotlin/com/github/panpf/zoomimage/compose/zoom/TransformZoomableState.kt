@@ -10,6 +10,9 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Velocity
+import com.github.panpf.zoomimage.compose.util.format
+import com.github.panpf.zoomimage.compose.util.name
+import com.github.panpf.zoomimage.compose.util.toShortString
 import com.github.panpf.zoomimage.util.Logger
 import com.github.panpf.zoomimage.zoom.ContainerWhitespace
 import com.github.panpf.zoomimage.zoom.OneFingerScaleSpec
@@ -335,5 +338,8 @@ abstract class TransformZoomableState(
 
     override fun calculateContainerWhitespace() = source.calculateContainerWhitespace()
 
-    override fun toString() = source.toString()
+    override fun toString() = "TransformZoomableState(" +
+            "source=${source}" +
+            "minScale=${minScale.format(4)}, " +
+            ")"
 }

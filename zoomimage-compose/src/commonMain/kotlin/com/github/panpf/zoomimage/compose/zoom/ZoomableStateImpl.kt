@@ -1180,7 +1180,7 @@ internal class ZoomableStateImpl(
     }
 
     override fun toString(): String =
-        "ZoomableState(" +
+        "ZoomableStateImpl(" +
                 "containerSize=${containerSize.toShortString()}, " +
                 "contentSize=${contentSize.toShortString()}, " +
                 "contentOriginSize=${contentOriginSize.toShortString()}, " +

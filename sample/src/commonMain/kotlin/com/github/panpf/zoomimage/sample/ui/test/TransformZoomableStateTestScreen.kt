@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,9 +56,15 @@ class TransformZoomableStateTestScreen : BaseScreen() {
             val beforeZoomableState = remember(afterZoomableState) {
                 SyncSizeZoomableState(afterZoomableState)
             }
+            LaunchedEffect(afterZoomableState) {
+                afterZoomableState.logger.level = Level.Debug
+            }
+            LaunchedEffect(beforeZoomableState) {
+                beforeZoomableState.logger.level = Level.Debug
+            }
 
-            val beforeZoomState = rememberCoilZoomState(beforeZoomableState)
-            val afterZoomState = rememberCoilZoomState(afterZoomableState)
+            val beforeZoomState = rememberCoilZoomState(beforeZoomableState, logLevel = Level.Debug)
+            val afterZoomState = rememberCoilZoomState(afterZoomableState, logLevel = Level.Debug)
 
             CoilZoomAsyncImage(
                 model = newComposeResourceUri(Res.getUri("files/pexels-taryn-elliott-4253835_400.jpg")),
@@ -148,6 +155,10 @@ class TransformZoomableStateTestScreen : BaseScreen() {
                 it.copy(scale = it.scale * scale)
             }
         }
+
+        override fun toString() = "SyncSizeZoomableState(" +
+                "source=${source}" +
+                ")"
     }
 
     private companion object {
